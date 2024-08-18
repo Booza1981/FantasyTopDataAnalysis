@@ -2,6 +2,7 @@ import os
 import re
 import pandas as pd
 from datetime import datetime
+import numpy as np
 
 # Constants
 DATA_FOLDER = r'C:\Users\beuzi\OneDrive\Jupyter Notebooks\FantasyTop\data'
@@ -39,15 +40,46 @@ def import_latest_csv_files(folder_path):
     latest_files = get_latest_csv_files(folder_path)
     return {prefix: pd.read_csv(file_path) for prefix, file_path in latest_files.items()}
 
-def calculate_tournament_averages(df):
+
+def calculate_tournament_statistics(df):
     if 'Name' in df.columns and 'Handle' in df.columns:
+        # Convert relevant columns to numeric, ignoring 'Name' and 'Handle'
         numeric_df = df.drop(['Name', 'Handle'], axis=1).apply(pd.to_numeric, errors='coerce')
+
+        # Calculate Mean Scores
         df['Average'] = numeric_df.mean(axis=1)
         df['Main_Tournaments_Ave'] = numeric_df[TOURNAMENT_COLUMNS].mean(axis=1)
         df['Main_Last_4_Ave'] = numeric_df[TOURNAMENT_COLUMNS[:4]].mean(axis=1)
+
+        # Calculate Variance and Standard Deviation
+        df['Variance'] = numeric_df.var(axis=1)
+        df['Main_Tournaments_Variance'] = numeric_df[TOURNAMENT_COLUMNS].var(axis=1)
+        df['Main_Last_4_Variance'] = numeric_df[TOURNAMENT_COLUMNS[:4]].var(axis=1)
+        df['Standard_Deviation'] = numeric_df.std(axis=1)
+        df['Main_Tournaments_Standard_Deviation'] = numeric_df[TOURNAMENT_COLUMNS].std(axis=1)
+        df['Main_Last_4_Standard_Deviation'] = numeric_df[TOURNAMENT_COLUMNS[:4]].std(axis=1)
+
+        # Calculate Z-scores (for each tournament score)
+        z_scores = numeric_df.sub(df['Average'], axis=0).div(df['Standard_Deviation'], axis=0)
+        z_score_columns = [f"Z_Score_{col}" for col in numeric_df.columns]
+        z_scores.columns = z_score_columns
+
+        # Add Z-scores to the original DataFrame
+        df = pd.concat([df, z_scores], axis=1)
+
+        # Handle NaN values that might result from division by zero
+        df.fillna(0, inplace=True)
+
+        # Calculate Moving Averages (e.g., 3-tournament moving average)
+        df['Moving_Avg_3'] = numeric_df[TOURNAMENT_COLUMNS].rolling(window=3, axis=1).mean().iloc[:, -1]  # Last value in the moving window
+        
     else:
         raise KeyError("Columns 'Name' and 'Handle' not found in the DataFrame")
+    
     return df
+
+
+
 
 def reorder_basic_hero_stats(df):
     columns_order = ['current_rank', 'hero_name', 'hero_handle'] + \
@@ -114,7 +146,7 @@ def process_portfolio_scores(portfolio_df, final_merged_df):
 
 def compile_data():
     dataframes = import_latest_csv_files(DATA_FOLDER)
-    dataframes['tournament_scores'] = calculate_tournament_averages(dataframes['tournament_scores'])
+    dataframes['tournament_scores'] = calculate_tournament_statistics(dataframes['tournament_scores'])
     dataframes['basic_hero_stats'] = reorder_basic_hero_stats(dataframes['basic_hero_stats'])
     final_merged_df = merge_dataframes(dataframes)
     portfolio_scores = process_portfolio_scores(dataframes['portfolio'], final_merged_df)

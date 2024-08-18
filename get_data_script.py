@@ -30,8 +30,14 @@ load_dotenv()
 PLAYER_ID = os.getenv("PLAYER_ID")
 URL_GRAPHQL = os.getenv("URL_GRAPHQL")
 URL_REST = os.getenv("URL_REST")
+DATA_FOLDER = 'data'
+
 COOKIES_FILE = 'cookies.pkl'
-DATA_FOLDER = "data"
+SESSION_FILE = 'session.pkl'
+LOCAL_STORAGE_FILE = 'local_storage.pkl'
+
+print(f"DATA_FOLDER is set to: {DATA_FOLDER}")
+
 
 # Twitter login details from environment variables
 TWITTER_USERNAME = os.getenv("TWITTER_USERNAME")
@@ -39,18 +45,73 @@ TWITTER_PASSWORD = os.getenv("TWITTER_PASSWORD")
 
 # Utility Functions
 
-def save_cookies(driver, filepath=COOKIES_FILE):
-    with open(filepath, 'wb') as file:
-        pickle.dump(driver.get_cookies(), file)
+def save_data(driver, filepath, data):
+ with open(filepath, 'wb') as file:
+     pickle.dump(data, file)
 
-def load_cookies(driver, filepath=COOKIES_FILE):
-    try:
-        with open(filepath, 'rb') as file:
-            cookies = pickle.load(file)
-            for cookie in cookies:
-                driver.add_cookie(cookie)
-    except FileNotFoundError:
-        print("Cookies file not found. Proceeding without loading cookies.")
+def load_data(filepath):
+ try:
+     with open(filepath, 'rb') as file:
+         return pickle.load(file)
+ except FileNotFoundError:
+     print(f"File {filepath} not found. Proceeding without loading data.")
+     return None
+ 
+
+def save_browser_data(driver):
+    session_storage = driver.execute_script("return window.sessionStorage;")
+    save_data(driver, SESSION_FILE, session_storage)
+
+    local_storage = driver.execute_script("return window.localStorage;")
+    save_data(driver, LOCAL_STORAGE_FILE, local_storage)
+    
+    cookies = {
+        'fantasy_top': driver.get_cookies(),
+        'privy_fantasy_top': []
+    }
+    driver.get('https://privy.fantasy.top')
+    cookies['privy_fantasy_top'] = driver.get_cookies()
+    save_data(driver, COOKIES_FILE, cookies)
+
+    driver.get("https://www.fantasy.top/home")
+    
+
+
+def load_browser_data(driver):
+    session_storage = load_data(SESSION_FILE)
+    if session_storage:
+        for key, value in session_storage.items():
+            driver.execute_script(f"window.sessionStorage.setItem('{key}', '{value}');")
+
+    local_storage = load_data(LOCAL_STORAGE_FILE)
+    if local_storage:
+        for key, value in local_storage.items():
+            driver.execute_script(f"window.localStorage.setItem('{key}', '{value}');")
+
+    cookies = load_data(COOKIES_FILE)
+    if cookies:
+        driver.get('https://www.fantasy.top')
+        for cookie in cookies['fantasy_top']:
+            driver.add_cookie(cookie)
+        driver.get('https://privy.fantasy.top')
+        for cookie in cookies['privy_fantasy_top']:
+            driver.add_cookie(cookie)
+        driver.get("https://www.fantasy.top/home")
+
+
+def clear_browser_data(driver):
+    # Clear cookies
+    driver.delete_all_cookies()
+    print("Cookies cleared.")
+
+    # Clear session storage
+    driver.execute_script("window.sessionStorage.clear();")
+    print("Session storage cleared.")
+
+    # Clear local storage
+    driver.execute_script("window.localStorage.clear();")
+    print("Local storage cleared.")
+
 
 def convert_to_eth(value):
     try:
@@ -89,41 +150,79 @@ def get_random_user_agent():
 def setup_driver():
     options = webdriver.ChromeOptions()
     options.add_argument(f"user-agent={get_random_user_agent()}")
+    options.add_argument("--headless")
     options.add_argument("--ignore-certificate-errors")
     options.add_argument("--disable-notifications")
-    options.add_argument("--disable-popup-blocking")
-    options.add_argument("--auto-open-devtools-for-tabs")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
-    # options.add_argument("--headless")
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
     driver = webdriver.Chrome(options=options)
     return driver
 
 
-def login_to_fantasy(driver):
+def login_to_fantasy(driver, username, password):
     driver.get("https://www.fantasy.top/home")
-    wait = WebDriverWait(driver, 10)
-    button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[style*='background: linear-gradient'][class*='rounded-md']")))
-    button.click()
-    modal_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Twitter')]")))
-    modal_button.click()
-    time.sleep(2)
-    actions = ActionChains(driver)
-    actions.send_keys(Keys.ESCAPE).perform()
-    username_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='text'][autocomplete='username']")))
-    username_input.send_keys(TWITTER_USERNAME)
-    next_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[text()='Next']/ancestor::button")))
-    next_button.click()
-    password_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='password'][type='password']")))
-    password_input.send_keys(TWITTER_PASSWORD)
-    login_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='LoginForm_Login_Button']")))
-    login_button.click()
-    close_popup_if_appears(driver)
-    authorize_if_appears(driver)
-    accept_terms_if_appears(driver)
-    driver.get("https://www.fantasy.top/home")
-    print("Logged In Successfully")
+    wait = WebDriverWait(driver, 5)
 
+    try:
+        # Try to find the "Continue" button, which appears if already logged in
+        continue_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Continue')]")))
+        continue_button.click()
+        print("Already logged in. Clicked 'Continue' button.")
+    except TimeoutException:
+        print("Continue button not found. Proceeding with login.")
+
+        # If "Continue" button is not found, proceed with Twitter login
+        try:
+            button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[style*='background: linear-gradient'][class*='rounded-md']")))
+            button.click()
+            modal_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Twitter')]")))
+            modal_button.click()
+            time.sleep(2)
+            actions = ActionChains(driver)
+            actions.send_keys(Keys.ESCAPE).perform()
+            username_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='text'][autocomplete='username']")))
+            username_input.send_keys(username)
+            next_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//span[text()='Next']/ancestor::button")))
+            next_button.click()
+            password_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='password'][type='password']")))
+            password_input.send_keys(password)
+            login_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='LoginForm_Login_Button']")))
+            login_button.click()
+            close_popup_if_appears(driver)
+            authorize_if_appears(driver)
+            accept_terms_if_appears(driver)
+            driver.get("https://www.fantasy.top/home")
+            print("Logged In Successfully")
+        except TimeoutException:
+            print("Twitter login flow elements not found. Login might have failed.")
+
+
+def check_login_success(driver):
+    try:
+        # Wait for the element to be present
+        element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.hidden.h-full.items-center.gap-x-2.md\\:flex"))
+        )
+        
+        # Execute JavaScript to check if the element has any child nodes
+        has_children = driver.execute_script(
+            "return arguments[0].children.length > 0;", element
+        )
+        
+        if has_children:
+            print("Login successful: The element has children.")
+            return True
+        else:
+            print("Login failed: The element does not have children.")
+            return False
+        
+    except TimeoutException:
+        print("The element was not found on the page.")
+        return False
+    
 
 def close_popup_if_appears(driver):
     try:
@@ -155,22 +254,34 @@ def accept_terms_if_appears(driver):
 def login():
     driver = setup_driver()
     driver.get("https://www.fantasy.top/home")
-    load_cookies(driver)
+
+     # Load cookies and session storage
+    load_browser_data(driver)
     driver.refresh()
-    login_to_fantasy(driver)
-    token = driver.execute_script("return localStorage.getItem('jwtToken');")
-    save_cookies(driver)
+
+    if check_login_success(driver) == False:
+        clear_browser_data(driver)
+        login_to_fantasy(driver, username, password)
+
+    # Save updated cookies and session storage
+    save_browser_data(driver)
+
     time.sleep(2)
     actions = ActionChains(driver)
     actions.send_keys(Keys.ESCAPE).perform()
+
+    token = driver.execute_script("return localStorage.getItem('jwtToken');")
+
     return driver, token
 
 # Data Download Functions
 
 def download_listings(driver):
+    actions = ActionChains(driver)
+    # Open DevTools
+    actions.send_keys(Keys.F12).perform() 
     driver.get('https://fantasy.top/marketplace')
     time.sleep(5)
-    actions = ActionChains(driver)
     actions.send_keys(Keys.ESCAPE).perform()
     try:
         main_element = driver.find_element(By.TAG_NAME, "main")
@@ -187,7 +298,6 @@ def download_listings(driver):
     num_iterations = 10
     interval = 3
     
-    actions = ActionChains(driver)
     for _ in range(num_iterations):
         logs = driver.get_log("performance")
         all_logs.extend(logs)
@@ -197,6 +307,11 @@ def download_listings(driver):
     websocket_messages = []
     for log in all_logs:
         message = json.loads(log['message'])['message']
+        
+        # Print the log level to identify which ones are useful
+        if 'level' in message:
+            print(f"Log Level: {message['level']}")
+
         if message['method'] == 'Network.webSocketFrameReceived':
             try:
                 payload = json.loads(message['params']['response']['payloadData'])
@@ -205,7 +320,9 @@ def download_listings(driver):
             except (json.JSONDecodeError, KeyError):
                 continue
     
-    with open('websocket_messages.json', 'w') as f:
+    # Overwrite the JSON file with fresh data
+    json_file_path = 'websocket_messages.json'
+    with open(json_file_path, 'w') as f:
         json.dump(websocket_messages, f, indent=4)
     
     processed_data = []
@@ -233,8 +350,17 @@ def download_listings(driver):
                         'fantasy_score': hero_data.get('current_score', {}).get('fantasy_score', None) if hero_data.get('current_score') else None
                     }
                     processed_data.append(hero_info)
-
     
+    # Close DevTools
+    actions.send_keys(Keys.F12).perform()
+
+    # Delete the JSON file after processing
+    if os.path.exists(json_file_path):
+        os.remove(json_file_path)
+        print(f"Deleted the file: {json_file_path}")
+    else:
+        print(f"The file {json_file_path} does not exist")
+
     raw_listings_df = pd.DataFrame(processed_data)
     listings_df = raw_listings_df.drop_duplicates(subset=['hero_id', 'hero_rarity_index'])
     listings_df.loc[:, 'rarity'] = listings_df['hero_rarity_index'].str.split('_').str[1]
@@ -255,6 +381,7 @@ def download_listings(driver):
                            'current_rank', 'previous_rank', 'views', 'fantasy_score'], inplace=True)
     final_df = final_df.rename(columns={'heroId': 'hero_id'})
     return final_df
+
 
 def send_graphql_request(query=None, variables=None, token=None, request_type='graphql', params=None, cookies=None):
     if request_type == 'graphql':
@@ -820,6 +947,68 @@ def get_bids(hero_id_list, token, cookies):
     highest_bids_df = collect_highest_bids(hero_id_list, token, cookies)
     return highest_bids_df
 
+
+def download_hero_trades(hero_ids, token):
+    all_trades_data = []
+
+    query = """
+    query GET_HERO_TRADES_CHART($hero_id: String!, $timestamp: timestamptz!) {
+      indexer_trades(
+        order_by: {timestamp: desc}
+        where: {card: {hero_id: {_eq: $hero_id}}, timestamp: {_gte: $timestamp}}
+      ) {
+        timestamp
+        card {
+          rarity
+          timestamp
+        }
+        price
+      }
+    }
+    """
+
+    headers = {
+        'authorization': f'Bearer {token}',
+        'content-type': 'application/json'
+    }
+
+    timestamp = (datetime.utcnow() - timedelta(days=30)).isoformat()
+
+    for hero_id in tqdm(hero_ids, desc="Fetching hero trades data"):
+        variables = {
+            "hero_id": str(hero_id),
+            "timestamp": timestamp
+        }
+        payload = {
+            "query": query,
+            "variables": variables,
+            "operationName": "GET_HERO_TRADES_CHART"
+        }
+
+        try:
+            response = requests.post(URL_GRAPHQL, headers=headers, json=payload)
+            response_data = response.json()
+
+            if 'errors' in response_data:
+                print(f"Error fetching hero trades for hero_id {hero_id}: {response_data['errors']}")
+                continue
+
+            trades = response_data.get('data', {}).get('indexer_trades', [])
+            for trade in trades:
+                trade_data = {
+                    'hero_id': hero_id,
+                    'timestamp': trade['timestamp'],
+                    'rarity': trade['card']['rarity'],
+                    'price': trade['price']
+                }
+                all_trades_data.append(trade_data)
+
+        except Exception as e:
+            print(f"Failed to fetch data for hero_id {hero_id}: {e}")
+
+    return pd.DataFrame(all_trades_data)
+
+
 def get_last_trades(token):
     query_get_last_trade = """
     query GET_LAST_TRADE {
@@ -864,21 +1053,13 @@ def get_last_trades(token):
     return pivoted_df
 
 def get_latest_file(directory, prefix):
-    '''
-    Pulls the latest csv
-    '''
     files = glob.glob(os.path.join(directory, f'{prefix}*.csv'))
     if not files:
         raise FileNotFoundError(f"No files starting with '{prefix}' found in {directory}")
     latest_file = max(files, key=os.path.getmtime)
     return latest_file
 
-
 def get_hero_data_list(target_data):
-    '''
-    Create list of ids or handles
-    '''
-
     assert target_data in ['id', 'handle'], f"Invalid target_data: {target_data}. Expected 'id' or 'handle'."
     
     if target_data == 'id':
@@ -886,24 +1067,60 @@ def get_hero_data_list(target_data):
         return hero_stats_df['hero_id'].to_list()
     elif target_data == "handle":
         basic_hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'basic_hero_stats'))
-        return basic_hero_stats_df['hero_handle'].to_list()        
-    
+        return basic_hero_stats_df['hero_handle'].to_list()
 
-# Main Execution Function
+def update_basic_hero_stats(driver, token):
+    basic_hero_stats_df = print_runtime(download_basic_hero_stats, token)
+    save_df_as_csv(basic_hero_stats_df, 'basic_hero_stats')
+
+def update_portfolio(driver, token):
+    portfolio_df = print_runtime(download_portfolio, token)
+    save_df_as_csv(portfolio_df, 'portfolio')
+
+def update_last_trades(driver, token):
+    last_trades_df = print_runtime(get_last_trades, token)
+    save_df_as_csv(last_trades_df, 'last_trades')
+
+def update_listings(driver):
+    listings_df = print_runtime(download_listings, driver)
+    save_df_as_csv(listings_df, 'listings')
+
+def update_hero_stats(driver, token):
+    hero_handles = get_hero_data_list('handle')
+    hero_stats_df = print_runtime(get_hero_stats, hero_handles, token)
+    save_df_as_csv(hero_stats_df, 'hero_stats')
+
+def update_hero_trades(driver, token):
+    hero_ids = get_hero_data_list('id')
+    hero_trades_df = print_runtime(download_hero_trades, hero_ids, token)
+    save_df_as_csv(hero_trades_df, 'hero_trades')
+    
+def update_hero_supply(driver, token):
+    hero_ids = get_hero_data_list('id')
+    hero_supply_df = print_runtime(get_hero_supply, hero_ids, token)
+    save_df_as_csv(hero_supply_df, 'hero_card_supply')
+
+def update_bids(driver, token):
+    hero_ids = get_hero_data_list('id')
+    cookies = {cookie['name']: cookie['value'] for cookie in driver.get_cookies()}
+    bids_df = print_runtime(get_bids, hero_ids, token, cookies)
+    save_df_as_csv(bids_df, 'bids')
+
+# Main Execution Function with Reusable Driver and Token
 
 def main():
     driver, token = login()
-    cookies = {cookie['name']: cookie['value'] for cookie in driver.get_cookies()}
-    
-    save_df_as_csv(print_runtime(download_basic_hero_stats, token), 'basic_hero_stats')
-    save_df_as_csv(print_runtime(download_portfolio, token), 'portfolio')
-    save_df_as_csv(print_runtime(get_last_trades, token), 'last_trades')
-    save_df_as_csv(print_runtime(download_listings, driver), 'listings')
-    hero_handles = get_hero_data_list('handle')
-    save_df_as_csv(print_runtime(get_hero_stats, hero_handles, token), 'hero_stats')
-    hero_ids = get_hero_data_list('id')
-    save_df_as_csv(print_runtime(get_hero_supply, hero_ids, token), 'hero_card_supply')
-    save_df_as_csv(print_runtime(get_bids, hero_ids, token, cookies), 'bids')
+    try:
+        # update_basic_hero_stats(driver, token)
+        update_portfolio(driver, token)
+        update_last_trades(driver, token)
+        update_listings(driver)
+        update_hero_stats(driver, token)
+        update_hero_trades(driver, token)
+        update_hero_supply(driver, token)
+        update_bids(driver, token)
+    finally:
+        driver.quit()
 
 if __name__ == "__main__":
     main()
