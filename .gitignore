@@ -1,0 +1,19 @@
+# Ignore Python cache and temporary files
+__pycache__/
+*.py[cod]
+
+# Ignore sensitive data files
+*.pkl
+.env
+
+# Ignore virtual environment folder
+venv/
+env/
+ft/
+
+# Ignore data folder
+data/
+
+
+# Ignore Jupyter notebook checkpoints
+.ipynb_checkpoints/
