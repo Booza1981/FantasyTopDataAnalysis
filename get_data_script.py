@@ -261,7 +261,7 @@ def login():
 
     if check_login_success(driver) == False:
         clear_browser_data(driver)
-        login_to_fantasy(driver, username, password)
+        login_to_fantasy(driver, TWITTER_USERNAME, TWITTER_PASSWORD)
 
     # Save updated cookies and session storage
     save_browser_data(driver)
