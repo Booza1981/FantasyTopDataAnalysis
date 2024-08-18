@@ -117,9 +117,24 @@ page_selection = st.sidebar.selectbox("Go to", ["Portfolio Data", "All Heroes", 
 def apply_table_styling():
     st.markdown("""
         <style>
+        /* Container for the sticky header and metrics */
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: inherit; /* Match background color with the rest of the page */
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+
+        /* Styling for the DataFrame container */
+        .dataframe-container {
+            max-height: calc(100vh - 200px); /* Adjust height dynamically */
+            overflow-y: auto;
+        }
+
+        /* Table styling */
         .dataframe {
-            max-height: 500px;
-            overflow: auto;
             border-collapse: separate;
             border-spacing: 0;
         }
@@ -128,39 +143,17 @@ def apply_table_styling():
             text-align: left;
             border: 1px solid #ddd;
         }
-        thead th {
+        .dataframe th {
             position: sticky;
             top: 0;
-            z-index: 2;
-            background-color: #f1f1f1;
-            color: #333;
-        }
-        tbody th {
-            position: sticky;
-            left: 0;
             z-index: 1;
             background-color: #f1f1f1;
             color: #333;
-        }
-        tbody td:first-child {
-            position: sticky;
-            left: 0;
-            background-color: #f1f1f1;
-            z-index: 1;
-        }
-        thead th:first-child {
-            position: sticky;
-            top: 0;
-            left: 0;
-            z-index: 3;
-            background-color: #f1f1f1;
-            color: #333;
-        }
-        tbody td img {
-            z-index: 0;
         }
         </style>
     """, unsafe_allow_html=True)
+
+
 
 # Load your data
 all_heroes_df = pd.read_csv('data/allHeroData.csv', dtype={'hero_id': str})
@@ -256,7 +249,7 @@ if page_selection == "Portfolio Data":
     if 'Total Value Last Sale Price' not in portfolio_column_groups['Market Values']:
         portfolio_column_groups['Market Values'].append('Total Value Last Sale Price')
 
-    st.title("My Portfolio")
+    st.markdown('<div class="sticky-header"><h2>My Portfolio</h2></div>', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
 
@@ -291,12 +284,16 @@ if page_selection == "Portfolio Data":
     selected_columns = [col for col in selected_columns if col in df.columns]
     filtered_df = df[selected_columns]
 
+    # Apply the table styling
     apply_table_styling()
 
-    st.write(f'<div class="dataframe">{filtered_df.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
+    # Display the table with the sticky header
+    st.markdown(f'<div class="dataframe-container">{filtered_df.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
 
 elif page_selection == "All Heroes":
-    st.title("All Heroes")
+    
+    st.markdown('<div class="sticky-header"><h2>All Heroes</h2></div>', unsafe_allow_html=True)
+   
 
     column_groups = all_heroes_column_groups
     df = all_heroes_df
@@ -332,8 +329,8 @@ elif page_selection == "All Heroes":
 
     apply_table_styling()
 
-    st.write(f'<div class="dataframe">{filtered_df.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
-
+    st.markdown('<div class="dataframe-container">{}</div>'.format(filtered_df.to_html(escape=False, index=False)), unsafe_allow_html=True)
+    
 elif page_selection == "Tournament Scores Over Time":
     st.title("Tournament Scores Over Time")
 
