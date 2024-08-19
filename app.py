@@ -170,6 +170,7 @@ def apply_table_styling():
             background-color: inherit; /* Match background color with the rest of the page */
             padding-top: 10px;
             padding-bottom: 10px;
+            margin-bottom: 20px; /* Added margin to prevent overlap */
         }
 
         /* Styling for the DataFrame container */
@@ -199,6 +200,123 @@ def apply_table_styling():
     """, unsafe_allow_html=True)
 
 
+def apply_hover_highlight():
+    st.markdown("""
+        <style>
+        .dataframe-container {
+            position: relative;
+        }
+        .dataframe-container table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .dataframe-container th,
+        .dataframe-container td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .dataframe-container tr:hover {
+            background-color: #f1f1f1;
+            color: #333;
+        }
+        .highlighted-cell {
+            background-color: #ffeb3b !important;
+        }
+        .highlighted-row td {
+            background-color: #f1f1f1 !important;
+            color: #333 !important;
+        }
+        .highlighted-column {
+            background-color: #ffeb3b !important;
+            color: #333 !important;
+        }
+        .highlighted-header {
+            border: 2px solid #ff5722 !important;  /* Add a border to the header cell */
+            background-color: #ffeb3b !important;
+            color: #333 !important;
+        }
+        </style>
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const table = document.querySelector('.dataframe-container table');
+            const rows = table.querySelectorAll('tr');
+            let hoveredRowIndex = -1;
+            let hoveredColumnIndex = -1;
+
+            table.addEventListener('mousemove', function(e) {
+                const rect = table.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                const x = e.clientX - rect.left;
+
+                let newRowIdx = -1;
+                let newColIdx = -1;
+
+                // Detect the hovered row
+                for (let i = 1; i < rows.length; i++) {
+                    const rowRect = rows[i].getBoundingClientRect();
+                    if (y >= rowRect.top - rect.top && y <= rowRect.bottom - rect.top) {
+                        newRowIdx = i;
+                        break;
+                    }
+                }
+
+                // Detect the hovered column
+                if (newRowIdx >= 0) {
+                    const cells = rows[newRowIdx].querySelectorAll('td, th');
+                    for (let i = 0; i < cells.length; i++) {
+                        const cellRect = cells[i].getBoundingClientRect();
+                        if (x >= cellRect.left - rect.left && x <= cellRect.right - rect.left) {
+                            newColIdx = i;
+                            break;
+                        }
+                    }
+                }
+
+                // Update highlighting
+                if (newRowIdx !== hoveredRowIndex || newColIdx !== hoveredColumnIndex) {
+                    // Remove old highlights
+                    if (hoveredRowIndex >= 0) {
+                        rows[hoveredRowIndex].classList.remove('highlighted-row');
+                    }
+                    if (hoveredColumnIndex >= 0) {
+                        rows.forEach(row => row.querySelectorAll('td, th')[hoveredColumnIndex].classList.remove('highlighted-cell', 'highlighted-column'));
+                        table.querySelectorAll('th')[hoveredColumnIndex].classList.remove('highlighted-header');
+                    }
+
+                    // Add new highlights
+                    if (newRowIdx >= 0) {
+                        rows[newRowIdx].classList.add('highlighted-row');
+                    }
+                    if (newColIdx >= 0) {
+                        rows.forEach(row => row.querySelectorAll('td, th')[newColIdx].classList.add('highlighted-cell', 'highlighted-column'));
+                        table.querySelectorAll('th')[newColIdx].classList.add('highlighted-header');
+                    }
+
+                    hoveredRowIndex = newRowIdx;
+                    hoveredColumnIndex = newColIdx;
+                }
+            });
+
+            table.addEventListener('mouseleave', function() {
+                if (hoveredRowIndex >= 0) {
+                    rows[hoveredRowIndex].classList.remove('highlighted-row');
+                    hoveredRowIndex = -1;
+                }
+                if (hoveredColumnIndex >= 0) {
+                    rows.forEach(row => row.querySelectorAll('td, th')[hoveredColumnIndex].classList.remove('highlighted-cell', 'highlighted-column'));
+                    table.querySelectorAll('th')[hoveredColumnIndex].classList.remove('highlighted-header');
+                    hoveredColumnIndex = -1;
+                }
+            });
+        });
+        </script>
+    """, unsafe_allow_html=True)
+
+
+
 
 # Load your data
 all_heroes_df = pd.read_csv('data/allHeroData.csv', dtype={'hero_id': str})
@@ -224,13 +342,15 @@ all_heroes_column_groups = {
     'Current Fantasy': ['current_rank', 'fantasy_score'],
     'Stars': ['hero_stars'],
     'Supply': ['inflation_degree', 'rarity1Count', 'rarity2Count', 'rarity3Count', 'rarity4Count'],
-    'Social Stats': ['hero_followers_count', 'hero_fantasy_score', 'hero_views'],
+    'Social Stats': ['tweet_count', 'hero_followers_count', 'hero_fantasy_score', 'hero_views'],
     'Market Data': ['rarity1_lowest_price', 'rarity2_lowest_price', 'rarity3_lowest_price', 'rarity4_lowest_price'],
+    'Last Trade Data': ['rarity1lastSalePrice', 'rarity2lastSalePrice', 'rarity3lastSalePrice','rarity4lastSalePrice'],
     'Tournament Averages': ['Average', 'Main_Tournaments_Ave', 'Main_Last_4_Ave'],
     'Tournament Variances': ['Variance', 'Main_Tournaments_Variance', 'Main_Last_4_Variance'],
     'Tournament Standard Deviations': ['Standard_Deviation', 'Main_Tournaments_Standard_Deviation', 'Main_Last_4_Standard_Deviation'],
     'Tournament Z-Scores': ['Z_Score', 'Main_Tournaments_Z_Score', 'Main_Last_4_Z_Score'],
-    'Value Analysis':  ['Price_to_Performance', 'Coefficient_of_Variation', 'Adjusted_Price_to_Performance', 'Market_Relative_Price_to_Perf', 'Adj_Price_to_Performance_Rank']
+    'Value Analysis Bronze':  ['Price_to_Performance_Bronze', 'Coefficient_of_Variation_Bronze', 'Adjusted_Price_to_Performance_Bronze', 'Market_Relative_Price_to_Perf_Bronze', 'Adj_Price_to_Performance_Rank_Bronze'],
+    'Value Analysis Silver':  ['Price_to_Performance_Silver', 'Coefficient_of_Variation_Silver', 'Adjusted_Price_to_Performance_Silver', 'Market_Relative_Price_to_Perf_Silver', 'Adj_Price_to_Performance_Rank_Silver']
 }
 
 
@@ -286,6 +406,9 @@ if page_selection == "Portfolio Data":
     df['Total Value Lowest Price'] = df['lowestPrice'] * df['cards_number']
     df['Total Value Last Sale Price'] = df['lastSalePrice'] * df['cards_number']
 
+    # Fill NaN values with 0 to ensure they are included in the filter
+    df['Total Value Lowest Price'] = df['Total Value Lowest Price'].fillna(0)
+
     total_portfolio_value_lowest = df['Total Value Lowest Price'].sum()
     total_portfolio_value_last_sale = df['Total Value Last Sale Price'].sum()
     total_cards_value = df['cards_number'].sum()
@@ -332,6 +455,7 @@ if page_selection == "Portfolio Data":
 
     # Apply the table styling
     apply_table_styling()
+    apply_hover_highlight()
 
     # Display the table with the sticky header
     st.markdown(f'<div class="dataframe-container">{filtered_df.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
@@ -374,6 +498,7 @@ elif page_selection == "All Heroes":
     filtered_df = df[selected_columns]
 
     apply_table_styling()
+    apply_hover_highlight()
 
     st.markdown('<div class="dataframe-container">{}</div>'.format(filtered_df.to_html(escape=False, index=False)), unsafe_allow_html=True)
     

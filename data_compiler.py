@@ -38,7 +38,20 @@ def get_latest_csv_files(folder_path):
 
 def import_latest_csv_files(folder_path):
     latest_files = get_latest_csv_files(folder_path)
-    return {prefix: pd.read_csv(file_path) for prefix, file_path in latest_files.items()}
+    dataframes = {}
+    for prefix, file_path in latest_files.items():
+        print(f"Reading file: {file_path}")
+        try:
+            df = pd.read_csv(file_path)
+            if df.empty:
+                print(f"Warning: File {file_path} is empty. Skipping.")
+                continue
+            dataframes[prefix] = df
+        except pd.errors.EmptyDataError:
+            print(f"Warning: File {file_path} is empty or has no columns to parse. Skipping.")
+        except Exception as e:
+            print(f"Error reading file {file_path}: {e}")
+    return dataframes
 
 
 def calculate_tournament_statistics(df):
@@ -80,18 +93,23 @@ def calculate_tournament_statistics(df):
 
 def calculate_value(df):
     # Assuming you have a DataFrame 'df' with the necessary columns
-    df['Price_to_Performance'] = df['rarity4_lowest_price'] / df['Main_Last_4_Ave']
+    df['Price_to_Performance_Bronze'] = df['rarity4_lowest_price'] / df['Main_Last_4_Ave']
+    df['Price_to_Performance_Silver'] = df['rarity3_lowest_price'] / df['Main_Last_4_Ave']
 
     # Adjusted ratio considering consistency
     df['Coefficient_of_Variation'] = df['Main_Last_4_Standard_Deviation'] / df['Main_Last_4_Ave']
-    df['Adjusted_Price_to_Performance'] = df['rarity4_lowest_price'] / (df['Main_Last_4_Ave'] * (1 - df['Coefficient_of_Variation']))
+    df['Adjusted_Price_to_Performance_Bronze'] = df['rarity4_lowest_price'] / (df['Main_Last_4_Ave'] * (1 - df['Coefficient_of_Variation']))
+    df['Adjusted_Price_to_Performance_Silver'] = df['rarity3_lowest_price'] / (df['Main_Last_4_Ave'] * (1 - df['Coefficient_of_Variation']))
 
     # You could also compute market averages or percentiles
-    market_avg_ratio = df['Price_to_Performance'].mean()
-    df['Market_Relative_Price_to_Perf'] = df['Price_to_Performance'] / market_avg_ratio
+    market_avg_ratio_bronze = df['Price_to_Performance_Bronze'].mean()
+    market_avg_ratio_silver = df['Price_to_Performance_Silver'].mean()
+    df['Market_Relative_Price_to_Perf_Bronze'] = df['Price_to_Performance_Bronze'] / market_avg_ratio_bronze
+    df['Market_Relative_Price_to_Perf_Silver'] = df['Price_to_Performance_Silver'] / market_avg_ratio_silver
 
     # Optional: Rank heroes based on adjusted price-to-performance
-    df['Adj_Price_to_Performance_Rank'] = df['Adjusted_Price_to_Performance'].rank()
+    df['Adj_Price_to_Performance_Rank_Bronze'] = df['Adjusted_Price_to_Performance_Bronze'].rank()
+    df['Adj_Price_to_Performance_Rank_Silver'] = df['Adjusted_Price_to_Performance_Silver'].rank()
 
     return df
 
