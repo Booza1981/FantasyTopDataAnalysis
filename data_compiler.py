@@ -78,7 +78,22 @@ def calculate_tournament_statistics(df):
     
     return df
 
+def calculate_value(df):
+    # Assuming you have a DataFrame 'df' with the necessary columns
+    df['Price_to_Performance'] = df['rarity4_lowest_price'] / df['Main_Last_4_Ave']
 
+    # Adjusted ratio considering consistency
+    df['Coefficient_of_Variation'] = df['Main_Last_4_Standard_Deviation'] / df['Main_Last_4_Ave']
+    df['Adjusted_Price_to_Performance'] = df['rarity4_lowest_price'] / (df['Main_Last_4_Ave'] * (1 - df['Coefficient_of_Variation']))
+
+    # You could also compute market averages or percentiles
+    market_avg_ratio = df['Price_to_Performance'].mean()
+    df['Market_Relative_Price_to_Perf'] = df['Price_to_Performance'] / market_avg_ratio
+
+    # Optional: Rank heroes based on adjusted price-to-performance
+    df['Adj_Price_to_Performance_Rank'] = df['Adjusted_Price_to_Performance'].rank()
+
+    return df
 
 
 def reorder_basic_hero_stats(df):
@@ -109,6 +124,8 @@ def merge_dataframes(dataframes):
     )
 
     final_merged_df['hero_id'] = final_merged_df['hero_id'].astype(str)
+
+    final_merged_df = calculate_value(final_merged_df)
     return final_merged_df
 
 def save_final_dataframes(final_merged_df, portfolio_scores):

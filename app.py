@@ -8,6 +8,51 @@ from get_data_script import (
 )
 from data_compiler import compile_data
 import time
+import glob
+import os
+
+###########################
+# Functions for Deck layout
+###########################
+def load_latest_file(pattern):
+    files = glob.glob(pattern)
+    if not files:
+        return None
+    latest_file = max(files, key=os.path.getmtime)
+    return pd.read_csv(latest_file)
+
+def display_deck(deck_df):
+    # Calculate the total for 'Main_Last_4_Ave'
+    total_main_last_4_ave = deck_df['Main_Last_4_Ave'].sum()
+
+    # Display the deck name and total Main_Last_4_Ave
+    st.markdown(f"### {deck_df['Deck_Name'].iloc[0]}")
+    st.write(f"**Total Main Last 4 Average:** {total_main_last_4_ave:.2f}")
+
+    # Create exactly 5 columns for each deck
+    cols = st.columns(5)
+
+    # Ensure we don't access columns out of range
+    for idx in range(5):
+        if idx < len(deck_df):  # If there's data for this column
+            row = deck_df.iloc[idx]
+            with cols[idx]:
+                st.image(row['picture_url'], caption=row['hero_name'], width=100)
+                st.write(f"Stars: {row['hero_stars']}")
+                st.write(f"Rank: {row['current_rank']}")
+                st.write(f"Gliding Score: {row['gliding_score']}")
+                st.write(f"Main Last 4 Ave: {row['Main_Last_4_Ave']:.2f}")
+        else:  # If no data for this column, leave it blank
+            with cols[idx]:
+                st.write("")
+
+
+
+
+###########################
+# End Functions for Deck layout
+###########################
+
 
 # Set page configuration
 st.set_page_config(layout="wide")
@@ -111,7 +156,7 @@ st.sidebar.title("Navigation")
 if st.session_state.is_updating:
     st.sidebar.info(st.session_state.update_status)
 
-page_selection = st.sidebar.selectbox("Go to", ["Portfolio Data", "All Heroes", "Tournament Scores Over Time"], index=0)
+page_selection = st.sidebar.selectbox("Go to", ["Portfolio Data", "All Heroes", "Tournament Scores Over Time", "Best Decks"], index=0)
 
 # Common CSS styling for the tables
 def apply_table_styling():
@@ -184,7 +229,8 @@ all_heroes_column_groups = {
     'Tournament Averages': ['Average', 'Main_Tournaments_Ave', 'Main_Last_4_Ave'],
     'Tournament Variances': ['Variance', 'Main_Tournaments_Variance', 'Main_Last_4_Variance'],
     'Tournament Standard Deviations': ['Standard_Deviation', 'Main_Tournaments_Standard_Deviation', 'Main_Last_4_Standard_Deviation'],
-    'Tournament Z-Scores': ['Z_Score', 'Main_Tournaments_Z_Score', 'Main_Last_4_Z_Score']
+    'Tournament Z-Scores': ['Z_Score', 'Main_Tournaments_Z_Score', 'Main_Last_4_Z_Score'],
+    'Value Analysis':  ['Price_to_Performance', 'Coefficient_of_Variation', 'Adjusted_Price_to_Performance', 'Market_Relative_Price_to_Perf', 'Adj_Price_to_Performance_Rank']
 }
 
 
@@ -414,6 +460,29 @@ elif page_selection == "Tournament Scores Over Time":
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+
+# Adding a new page for "Best Decks"
+if page_selection == "Best Decks":
+    st.title("Best Decks")
+
+    # Load the latest silver and bronze deck files
+    silver_decks = load_latest_file('data/combined_best_decks_silver_*.csv')
+    bronze_decks = load_latest_file('data/combined_best_decks_bronze_*.csv')
+
+    # Combine silver and bronze decks into one dataframe if needed
+    combined_decks = pd.concat([silver_decks, bronze_decks])
+
+    if combined_decks is not None:
+        # Display each deck by filtering by "Deck Name"
+        deck_names = combined_decks['Deck_Name'].unique()
+        for deck_name in deck_names:
+            deck_df = combined_decks[combined_decks['Deck_Name'] == deck_name]
+            display_deck(deck_df)
+    else:
+        st.error("No deck data available.")
+
+
 
 # "Refresh Data" Section
 st.sidebar.subheader("Refresh Data")
