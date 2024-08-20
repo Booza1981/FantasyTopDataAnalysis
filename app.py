@@ -534,233 +534,242 @@ def handle_filters_and_sorting(df, column_groups, default_sort_column, default_s
                 df = df[df['rarity'].isin(selected_rarity)]
     return df
 
-
+# Create two main columns: one for content and one for the "right-hand sidebar"
+col_main, col_sidebar = st.columns([3, 1])
 
 # Left-hand Main Content Area
+with col_main:
+    if page_selection == "Portfolio Data":
+        column_groups = portfolio_column_groups
+        df = portfolio_df
+        default_sort_column = 'gliding_score'
+        default_sort_ascending = False
 
-if page_selection == "Portfolio Data":
-    column_groups = portfolio_column_groups
-    df = portfolio_df
-    default_sort_column = 'gliding_score'
-    default_sort_ascending = False
+        df['Total Value Lowest Price'] = df['lowestPrice'] * df['cards_number']
+        df['Total Value Last Sale Price'] = df['lastSalePrice'] * df['cards_number']
 
-    df['Total Value Lowest Price'] = df['lowestPrice'] * df['cards_number']
-    df['Total Value Last Sale Price'] = df['lastSalePrice'] * df['cards_number']
+        # Fill NaN values with 0 to ensure they are included in the filter
+        df['Total Value Lowest Price'] = df['Total Value Lowest Price'].fillna(0)
 
-    # Fill NaN values with 0 to ensure they are included in the filter
-    df['Total Value Lowest Price'] = df['Total Value Lowest Price'].fillna(0)
+        total_portfolio_value_lowest = df['Total Value Lowest Price'].sum()
+        total_portfolio_value_last_sale = df['Total Value Last Sale Price'].sum()
+        total_cards_value = df['cards_number'].sum()
 
-    total_portfolio_value_lowest = df['Total Value Lowest Price'].sum()
-    total_portfolio_value_last_sale = df['Total Value Last Sale Price'].sum()
-    total_cards_value = df['cards_number'].sum()
+        if 'Total Value Lowest Price' not in portfolio_column_groups['Market Values']:
+            portfolio_column_groups['Market Values'].append('Total Value Lowest Price')
+        if 'Total Value Last Sale Price' not in portfolio_column_groups['Market Values']:
+            portfolio_column_groups['Market Values'].append('Total Value Last Sale Price')
 
-    if 'Total Value Lowest Price' not in portfolio_column_groups['Market Values']:
-        portfolio_column_groups['Market Values'].append('Total Value Lowest Price')
-    if 'Total Value Last Sale Price' not in portfolio_column_groups['Market Values']:
-        portfolio_column_groups['Market Values'].append('Total Value Last Sale Price')
+        st.markdown('<div class="sticky-header"><h2>My Portfolio</h2></div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="sticky-header"><h2>My Portfolio</h2></div>', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(label="Total Number of Cards", value=total_cards_value)
-    col2.metric(label="Portfolio Value (Lowest Price)", value=f"{total_portfolio_value_lowest:,.2f} ETH")
-    col3.metric(label="Portfolio Value (Last Sale Price)", value=f"{total_portfolio_value_last_sale:,.2f} ETH")
-
-    df = handle_filters_and_sorting(df, column_groups, default_sort_column, default_sort_ascending)
-
-    st.sidebar.subheader("Table Customisation")
-
-    with st.sidebar.expander("Select Column Groups", expanded=False):
-        selected_groups = st.multiselect(
-            "Select column groups to display", 
-            options=column_groups.keys(), 
-            default=column_groups.keys(),
-            key="portfolio_column_groups_multiselect"  # Assign a unique key here
-        )
-
-    selected_columns = []
-    with st.sidebar.expander("Select Specific Columns", expanded=False):
-        for group in selected_groups:
-            st.write(f"Select specific columns from {group}:")
-            selected_columns_group = st.multiselect(
-                f"{group} Columns", 
-                options=column_groups[group], 
-                default=column_groups[group],
-                key=f"{group}_columns_multiselect_portfolio"  # Assign a unique key here
-            )
-            selected_columns.extend(selected_columns_group)
-
-    selected_columns = [col for col in selected_columns if col in df.columns]
-    filtered_df = df[selected_columns]
-
-    # Apply the table styling
-    apply_table_styling()
-    apply_hover_highlight()
-
-    # Display the table with the sticky header
-    st.markdown('<div class="dataframe-container">{}</div>'.format(filtered_df.to_html(escape=False, index=False)), unsafe_allow_html=True)
-    
-# For the "All Heroes" page
-elif page_selection == "All Heroes":
-    
-    st.markdown('<div class="sticky-header"><h2>All Heroes</h2></div>', unsafe_allow_html=True)
-
-    column_groups = all_heroes_column_groups
-    df = all_heroes_df  # Use the correct DataFrame
-
-    # Verify that "Total Value Lowest Price" is not in this DataFrame
-    if 'Total Value Lowest Price' in df.columns:
-        df = df.drop(columns=['Total Value Lowest Price'])
-        print("'Total Value Lowest Price' column was removed.")
-
-    default_sort_column = 'current_rank'
-    default_sort_ascending = True
-
-    # Apply sorting
-    df = df.sort_values(by=default_sort_column, ascending=default_sort_ascending)
-
-    # Apply filters and sorting   
-    st.sidebar.subheader("Table Customisation")
-    
-    with st.sidebar.expander("Select Column Groups", expanded=False):
-        selected_groups = st.multiselect(
-            "Select column groups to display", 
-            options=column_groups.keys(), 
-            default=column_groups.keys(),
-            key="all_heroes_column_groups_multiselect"  # Assign a unique key here
-        )
-
-    selected_columns = []
-    with st.sidebar.expander("Select Specific Columns", expanded=False):
-        for group in selected_groups:
-            st.write(f"Select specific columns from {group}:")
-            selected_columns_group = st.multiselect(
-                f"{group} Columns", 
-                options=column_groups[group], 
-                default=column_groups[group],
-                key=f"{group}_columns_multiselect_all_heroes"  # Assign a unique key here
-            )
-            selected_columns.extend(selected_columns_group)
-
-    selected_columns = [col for col in selected_columns if col in df.columns]
-    filtered_df = df[selected_columns]
-
-    print(filtered_df.head())
-
-    styled_html = style_dataframe_with_gradients(filtered_df, star_cumsum, gradient_colors)
-    
-    apply_table_styling()
-    apply_hover_highlight()
-
-    st.markdown(f'<div class="dataframe-container">{styled_html}</div>', unsafe_allow_html=True)
-
-    
-
-elif page_selection == "Tournament Scores Over Time":
-    st.title("Tournament Scores Over Time")
-
-    filtered_df = all_heroes_df.copy()
-
-    with st.expander("Filters and Sorting", expanded=False):
         col1, col2, col3 = st.columns(3)
 
-        with col1:
-            min_star, max_star = int(filtered_df['hero_stars'].min()), int(filtered_df['hero_stars'].max())
-            selected_stars = st.slider('Filter by Hero Stars', min_value=min_star, max_value=max_star, value=(min_star, max_star))
-            filtered_df = filtered_df[(filtered_df['hero_stars'] >= selected_stars[0]) & (filtered_df['hero_stars'] <= selected_stars[1])]
+        col1.metric(label="Total Number of Cards", value=total_cards_value)
+        col2.metric(label="Portfolio Value (Lowest Price)", value=f"{total_portfolio_value_lowest:,.2f} ETH")
+        col3.metric(label="Portfolio Value (Last Sale Price)", value=f"{total_portfolio_value_last_sale:,.2f} ETH")
 
-        with col2:
-            min_price, max_price = st.slider(
-                'Price Range',
-                min_value=float(filtered_df['rarity4_lowest_price'].min()),
-                max_value=float(filtered_df['rarity4_lowest_price'].max()),
-                value=(float(filtered_df['rarity4_lowest_price'].min()), float(filtered_df['rarity4_lowest_price'].max())),
-                step=0.001,
-                format="%.3f"
+        df = handle_filters_and_sorting(df, column_groups, default_sort_column, default_sort_ascending)
+
+        st.sidebar.subheader("Table Customisation")
+
+        with st.sidebar.expander("Select Column Groups", expanded=False):
+            selected_groups = st.multiselect(
+                "Select column groups to display", 
+                options=column_groups.keys(), 
+                default=column_groups.keys(),
+                key="portfolio_column_groups_multiselect"  # Assign a unique key here
             )
-            filtered_df = filtered_df[(filtered_df['rarity4_lowest_price'] >= min_price) & (filtered_df['rarity4_lowest_price'] <= max_price)]
 
-        with col3:
-            average_type = st.radio("Select average type for top 5", options=["Main_Tournaments_Ave", "Main_Last_4_Ave"])
+        selected_columns = []
+        with st.sidebar.expander("Select Specific Columns", expanded=False):
+            for group in selected_groups:
+                st.write(f"Select specific columns from {group}:")
+                selected_columns_group = st.multiselect(
+                    f"{group} Columns", 
+                    options=column_groups[group], 
+                    default=column_groups[group],
+                    key=f"{group}_columns_multiselect_portfolio"  # Assign a unique key here
+                )
+                selected_columns.extend(selected_columns_group)
 
-    selected_heroes = st.sidebar.multiselect('Select Heroes to Compare', options=filtered_df['hero_name'].unique())
+        selected_columns = [col for col in selected_columns if col in df.columns]
+        filtered_df = df[selected_columns]
 
-    tournament_columns = [
-        'Main 11', 'Main 10', 'Main 9', 'Main 8', 'Main 7', 'Main 6 *Sat/Sun Only*',
-        'Main 5', 'All Rarities | 22 days', 'Main 4', 'Main 3', 'Common Only ✳️ Capped 20 🌟',
-        'Rare Only 💠', 'Main 2', 'Main 1', 'Flash Tournament'
-    ]
+        # Apply the table styling
+        apply_table_styling()
+        apply_hover_highlight()
 
-    if not selected_heroes:
-        top_heroes = filtered_df.nlargest(5, average_type)['hero_name'].tolist()
-    else:
-        top_heroes = selected_heroes
+        # Display the table with the sticky header
+        st.markdown('<div class="dataframe-container">{}</div>'.format(filtered_df.to_html(escape=False, index=False)), unsafe_allow_html=True)
+        
+    # For the "All Heroes" page
+    elif page_selection == "All Heroes":
+        
+        st.markdown('<div class="sticky-header"><h2>All Heroes</h2></div>', unsafe_allow_html=True)
 
-    long_df = filtered_df.melt(id_vars=['hero_name'], value_vars=tournament_columns,
-                            var_name='Tournament', value_name='Points')
+        column_groups = all_heroes_column_groups
+        df = all_heroes_df  # Use the correct DataFrame
 
-    fig = go.Figure()
+        # Verify that "Total Value Lowest Price" is not in this DataFrame
+        if 'Total Value Lowest Price' in df.columns:
+            df = df.drop(columns=['Total Value Lowest Price'])
+            print("'Total Value Lowest Price' column was removed.")
 
-    for hero in long_df['hero_name'].unique():
-        hero_data = long_df[long_df['hero_name'] == hero]
+        default_sort_column = 'current_rank'
+        default_sort_ascending = True
 
-        hero_customdata = filtered_df[filtered_df['hero_name'] == hero][['rarity1_lowest_price', 'rarity2_lowest_price', 'rarity3_lowest_price', 'rarity4_lowest_price']].iloc[0].values
+        # Apply sorting
+        df = df.sort_values(by=default_sort_column, ascending=default_sort_ascending)
 
-        opacity = 1.0 if hero in top_heroes else 0.2
+        # Apply filters and sorting   
+        st.sidebar.subheader("Table Customisation")
+        
+        with st.sidebar.expander("Select Column Groups", expanded=False):
+            selected_groups = st.multiselect(
+                "Select column groups to display", 
+                options=column_groups.keys(), 
+                default=column_groups.keys(),
+                key="all_heroes_column_groups_multiselect"  # Assign a unique key here
+            )
 
-        fig.add_trace(go.Scatter(
-            x=hero_data['Tournament'],
-            y=hero_data['Points'],
-            mode='lines+markers',
-            name=hero,
-            opacity=opacity,
-            hovertemplate=(
-                '<b>%{text}</b><br>' +
-                'Tournament: %{x}<br>' +
-                'Points: %{y}<br>' +
-                'Rarity 1 Price: %{customdata[0]:.3f}<br>' +
-                'Rarity 2 Price: %{customdata[1]:.3f}<br>' +
-                'Rarity 3 Price: %{customdata[2]:.3f}<br>' +
-                'Rarity 4 Price: %{customdata[3]:.3f}<extra></extra>'
-            ),
-            customdata=[hero_customdata] * len(hero_data),
-            text=[hero] * len(hero_data)
-        ))
+        selected_columns = []
+        with st.sidebar.expander("Select Specific Columns", expanded=False):
+            for group in selected_groups:
+                st.write(f"Select specific columns from {group}:")
+                selected_columns_group = st.multiselect(
+                    f"{group} Columns", 
+                    options=column_groups[group], 
+                    default=column_groups[group],
+                    key=f"{group}_columns_multiselect_all_heroes"  # Assign a unique key here
+                )
+                selected_columns.extend(selected_columns_group)
 
-    fig.update_layout(
-        title="Tournament Scores Over Time",
-        xaxis_title="Tournament",
-        yaxis_title="Points",
-        xaxis=dict(categoryorder="array", categoryarray=tournament_columns[::-1]),
-        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
-        showlegend=True,
-        width=2000,
-        height=800
-    )
+        selected_columns = [col for col in selected_columns if col in df.columns]
+        filtered_df = df[selected_columns]
 
-    st.plotly_chart(fig, use_container_width=True)
+        print(filtered_df.head())
+
+        styled_html = style_dataframe_with_gradients(filtered_df, star_cumsum, gradient_colors)
+        
+        apply_table_styling()
+        apply_hover_highlight()
+
+        st.markdown(f'<div class="dataframe-container">{styled_html}</div>', unsafe_allow_html=True)
+
+        
+
+    elif page_selection == "Tournament Scores Over Time":
+        st.title("Tournament Scores Over Time")
+
+        filtered_df = all_heroes_df.copy()
+
+        with st.expander("Filters and Sorting", expanded=False):
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                min_star, max_star = int(filtered_df['hero_stars'].min()), int(filtered_df['hero_stars'].max())
+                selected_stars = st.slider('Filter by Hero Stars', min_value=min_star, max_value=max_star, value=(min_star, max_star))
+                filtered_df = filtered_df[(filtered_df['hero_stars'] >= selected_stars[0]) & (filtered_df['hero_stars'] <= selected_stars[1])]
+
+            with col2:
+                min_price, max_price = st.slider(
+                    'Price Range',
+                    min_value=float(filtered_df['rarity4_lowest_price'].min()),
+                    max_value=float(filtered_df['rarity4_lowest_price'].max()),
+                    value=(float(filtered_df['rarity4_lowest_price'].min()), float(filtered_df['rarity4_lowest_price'].max())),
+                    step=0.001,
+                    format="%.3f"
+                )
+                filtered_df = filtered_df[(filtered_df['rarity4_lowest_price'] >= min_price) & (filtered_df['rarity4_lowest_price'] <= max_price)]
+
+            with col3:
+                average_type = st.radio("Select average type for top 5", options=["Main_Tournaments_Ave", "Main_Last_4_Ave"])
+
+        selected_heroes = st.sidebar.multiselect('Select Heroes to Compare', options=filtered_df['hero_name'].unique())
+
+        tournament_columns = [
+            'Main 11', 'Main 10', 'Main 9', 'Main 8', 'Main 7', 'Main 6 *Sat/Sun Only*',
+            'Main 5', 'All Rarities | 22 days', 'Main 4', 'Main 3', 'Common Only ✳️ Capped 20 🌟',
+            'Rare Only 💠', 'Main 2', 'Main 1', 'Flash Tournament'
+        ]
+
+        if not selected_heroes:
+            top_heroes = filtered_df.nlargest(5, average_type)['hero_name'].tolist()
+        else:
+            top_heroes = selected_heroes
+
+        long_df = filtered_df.melt(id_vars=['hero_name'], value_vars=tournament_columns,
+                                var_name='Tournament', value_name='Points')
+
+        fig = go.Figure()
+
+        for hero in long_df['hero_name'].unique():
+            hero_data = long_df[long_df['hero_name'] == hero]
+
+            hero_customdata = filtered_df[filtered_df['hero_name'] == hero][['rarity1_lowest_price', 'rarity2_lowest_price', 'rarity3_lowest_price', 'rarity4_lowest_price']].iloc[0].values
+
+            opacity = 1.0 if hero in top_heroes else 0.2
+
+            fig.add_trace(go.Scatter(
+                x=hero_data['Tournament'],
+                y=hero_data['Points'],
+                mode='lines+markers',
+                name=hero,
+                opacity=opacity,
+                hovertemplate=(
+                    '<b>%{text}</b><br>' +
+                    'Tournament: %{x}<br>' +
+                    'Points: %{y}<br>' +
+                    'Rarity 1 Price: %{customdata[0]:.3f}<br>' +
+                    'Rarity 2 Price: %{customdata[1]:.3f}<br>' +
+                    'Rarity 3 Price: %{customdata[2]:.3f}<br>' +
+                    'Rarity 4 Price: %{customdata[3]:.3f}<extra></extra>'
+                ),
+                customdata=[hero_customdata] * len(hero_data),
+                text=[hero] * len(hero_data)
+            ))
+
+        fig.update_layout(
+            title="Tournament Scores Over Time",
+            xaxis_title="Tournament",
+            yaxis_title="Points",
+            xaxis=dict(categoryorder="array", categoryarray=tournament_columns[::-1]),
+            legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
+            showlegend=True,
+            width=2000,
+            height=800
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
 
-# Adding a new page for "Best Decks"
-if page_selection == "Best Decks":
-    st.title("Best Decks")
+    # Adding a new page for "Best Decks"
+    if page_selection == "Best Decks":
+        st.title("Best Decks")
 
-    # Load the latest silver and bronze deck files
-    silver_decks = load_latest_file('data/combined_best_decks_silver_*.csv')
-    bronze_decks = load_latest_file('data/combined_best_decks_bronze_*.csv')
+        # Load the latest silver and bronze deck files
+        silver_decks = load_latest_file('data/combined_best_decks_silver_*.csv')
+        bronze_decks = load_latest_file('data/combined_best_decks_bronze_*.csv')
 
-    # Combine silver and bronze decks into one dataframe if needed
-    combined_decks = pd.concat([silver_decks, bronze_decks])
+        # Combine silver and bronze decks into one dataframe if needed
+        combined_decks = pd.concat([silver_decks, bronze_decks])
 
-    if combined_decks is not None:
-        # Display each deck by filtering by "Deck Name"
-        deck_names = combined_decks['Deck_Name'].unique()
-        for deck_name in deck_names:
-            deck_df = combined_decks[combined_decks['Deck_Name'] == deck_name]
-            display_deck(deck_df)
-    else:
-        st.error("No deck data available.")
+        if combined_decks is not None:
+            # Display each deck by filtering by "Deck Name"
+            deck_names = combined_decks['Deck_Name'].unique()
+            for deck_name in deck_names:
+                deck_df = combined_decks[combined_decks['Deck_Name'] == deck_name]
+                display_deck(deck_df)
+        else:
+            st.error("No deck data available.")
+
+# Right-hand RSS Feed Sidebar
+with col_sidebar:
+    st.subheader("Latest")
+
+    # Render the tweet container with the initial tweets
+    tweet_html = generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT)
+    components.html(tweet_html, height=1400)
 
 
 # Load your CSV data into a DataFrame
@@ -782,13 +791,7 @@ st.sidebar.subheader("Tournament Summary")
 st.sidebar.dataframe(grouped_summary)
 
 
-# Right-hand RSS Feed Sidebar
-with col_sidebar:
-    st.subheader("Latest")
 
-    # Render the tweet container with the initial tweets
-    tweet_html = generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT)
-    components.html(tweet_html, height=1400)
 
 # "Refresh Data" Section
 st.sidebar.subheader("Refresh Data")
