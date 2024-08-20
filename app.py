@@ -17,12 +17,14 @@ import streamlit.components.v1 as components
 ###########################
 # RSS Feed Parsing
 ###########################
+# Set the number of initial tweets to load
+INITIAL_TWEET_COUNT = 10
 
+# RSS Feed Parsing
 def extract_tweet_urls_from_rss(feed_url):
     feed = feedparser.parse(feed_url)
     tweet_urls = []
     for entry in feed.entries:
-        # Assuming tweet URLs are in the link field
         if "twitter.com" in entry.link or "x.com" in entry.link:
             tweet_urls.append(entry.link)
     return tweet_urls
@@ -31,9 +33,47 @@ def extract_tweet_urls_from_rss(feed_url):
 rss_feed_url = "https://rss.app/feeds/_edUxK8keJWUW97nt.xml"
 tweet_urls = extract_tweet_urls_from_rss(rss_feed_url)
 
-# Limiting the initial number of tweets to load
-INITIAL_TWEET_COUNT = 5
+# Initialize tweet display state
+if 'loaded_tweet_count' not in st.session_state:
+    st.session_state.loaded_tweet_count = INITIAL_TWEET_COUNT
 
+# Function to generate HTML for tweets
+def generate_tweet_html(tweet_urls, start_index=0, count=INITIAL_TWEET_COUNT):
+    tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(start_index, start_index + count)])
+    tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[start_index:start_index + count]])
+
+    html_code = f"""
+    <div id="tweet-container" style="height: 100vh; overflow-y: auto;">
+        {tweet_divs}
+    </div>
+    <script type="text/javascript">
+        var tweetIds = [{tweet_ids}];
+        
+        function loadTweets(startIndex) {{
+            tweetIds.forEach(function(id, index) {{
+                var tweetElement = document.getElementById('tweet-' + (index + startIndex));
+                if (tweetElement && !tweetElement.hasChildNodes()) {{
+                    twttr.widgets.createTweet(id, tweetElement, {{
+                        align: 'center'
+                    }});
+                }}
+            }});
+        }}
+
+        if (typeof twttr === 'undefined') {{
+            var script = document.createElement("script");
+            script.src = "https://platform.twitter.com/widgets.js";
+            script.async = true;
+            script.onload = function () {{
+                loadTweets({start_index});
+            }};
+            document.head.appendChild(script);
+        }} else {{
+            loadTweets({start_index});
+        }}
+    </script>
+    """
+    return html_code
 
 ###########################
 # Functions for Deck layout
@@ -71,9 +111,6 @@ def display_deck(deck_df):
                 st.write("")
 
 
-# RSS Feed URL
-rss_feed_url = "YOUR_RSS_FEED_URL"  # Replace with your RSS feed URL
-feed = feedparser.parse('https://rss.app/feeds/_edUxK8keJWUW97nt.xml')
 
 
 ###########################
@@ -644,79 +681,20 @@ with col_main:
             st.error("No deck data available.")
 
 
-html_code = """
-<div id="tweet-container" style="height: 100vh; overflow-y: auto;">
-    {tweet_divs}
-</div>
-<script type="text/javascript">
-    // Tweet IDs
-    var tweetIds = [{tweet_ids}];
-    
-    // Load Twitter widgets.js
-    if (typeof twttr === 'undefined') {{
-        var script = document.createElement("script");
-        script.src = "https://platform.twitter.com/widgets.js";
-        script.async = true;
-        script.onload = function () {{
-            setTimeout(function() {{
-                tweetIds.forEach(function (id, index) {{
-                    var tweetElement = document.getElementById('tweet-' + index);
-                    if (tweetElement) {{
-                        twttr.widgets.createTweet(id, tweetElement, {{
-                            align: 'center'
-                        }}).then(function (el) {{
-                            console.log("Tweet loaded: " + id);
-                        }}).catch(function (err) {{
-                            console.error("Failed to load tweet: " + id, err);
-                        }});
-                    }} else {{
-                        console.error("Tweet container not found for index: " + index);
-                    }}
-                }});
-            }}, 1000);  // Delay to allow the page to fully load
-        }};
-        document.head.appendChild(script);
-    }} else {{
-        setTimeout(function() {{
-            tweetIds.forEach(function (id, index) {{
-                var tweetElement = document.getElementById('tweet-' + index);
-                if (tweetElement) {{
-                    twttr.widgets.createTweet(id, tweetElement, {{
-                        align: 'center'
-                    }}).then(function (el) {{
-                        console.log("Tweet loaded: " + id);
-                    }}).catch(function (err) {{
-                        console.error("Failed to load tweet: " + id, err);
-                    }});
-                }} else {{
-                    console.error("Tweet container not found for index: " + index);
-                }}
-            }});
-        }}, 1000);  // Delay to allow the page to fully load
-    }}
-</script>
-"""
-
-# Generate HTML for tweet divs and ids, initially loading only a few
-tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(INITIAL_TWEET_COUNT)])
-tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[:INITIAL_TWEET_COUNT]])
-
-# Right-hand RSS Feed Sidebar
 with col_sidebar:
     st.subheader("Latest")
-    components.html(html_code.format(tweet_divs=tweet_divs, tweet_ids=tweet_ids), height=1200)
+
+    # Initially render the tweet container
+    if st.session_state.loaded_tweet_count == INITIAL_TWEET_COUNT:
+        tweet_html = generate_tweet_html(tweet_urls, start_index=0, count=st.session_state.loaded_tweet_count)
+        components.html(tweet_html, height=1200)
 
     # "Load More" button to load more tweets
-    if len(tweet_urls) > INITIAL_TWEET_COUNT:
+    if st.session_state.loaded_tweet_count < len(tweet_urls):
         if st.button("Load More Tweets"):
-            # Generate additional tweets to load
-            additional_tweet_divs = "\n".join([f'<div id="tweet-{i + INITIAL_TWEET_COUNT}"></div>' for i in range(len(tweet_urls) - INITIAL_TWEET_COUNT)])
-            additional_tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[INITIAL_TWEET_COUNT:]])
-
-            # Append the additional tweets to the container
-            components.html(html_code.format(tweet_divs=additional_tweet_divs, tweet_ids=additional_tweet_ids), height=1200)
-
-
+            st.session_state.loaded_tweet_count += INITIAL_TWEET_COUNT
+            tweet_html = generate_tweet_html(tweet_urls, start_index=st.session_state.loaded_tweet_count - INITIAL_TWEET_COUNT, count=INITIAL_TWEET_COUNT)
+            components.html(tweet_html, height=0)  # Inject new tweets without re-rendering the container
 
 # "Refresh Data" Section
 st.sidebar.subheader("Refresh Data")
