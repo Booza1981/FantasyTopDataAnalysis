@@ -31,7 +31,8 @@ def extract_tweet_urls_from_rss(feed_url):
 rss_feed_url = "https://rss.app/feeds/_edUxK8keJWUW97nt.xml"
 tweet_urls = extract_tweet_urls_from_rss(rss_feed_url)
 
-
+# Limiting the initial number of tweets to load
+INITIAL_TWEET_COUNT = 5
 
 
 ###########################
@@ -696,14 +697,24 @@ html_code = """
 </script>
 """
 
-# Generate HTML for tweet divs and ids
-tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(len(tweet_urls))])
-tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls])
+# Generate HTML for tweet divs and ids, initially loading only a few
+tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(INITIAL_TWEET_COUNT)])
+tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[:INITIAL_TWEET_COUNT]])
 
 # Right-hand RSS Feed Sidebar
 with col_sidebar:
     st.subheader("Latest")
-    components.html(html_code.format(tweet_divs=tweet_divs, tweet_ids=tweet_ids), height=800)
+    components.html(html_code.format(tweet_divs=tweet_divs, tweet_ids=tweet_ids), height=1200)
+
+    # "Load More" button to load more tweets
+    if len(tweet_urls) > INITIAL_TWEET_COUNT:
+        if st.button("Load More Tweets"):
+            # Generate additional tweets to load
+            additional_tweet_divs = "\n".join([f'<div id="tweet-{i + INITIAL_TWEET_COUNT}"></div>' for i in range(len(tweet_urls) - INITIAL_TWEET_COUNT)])
+            additional_tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[INITIAL_TWEET_COUNT:]])
+
+            # Append the additional tweets to the container
+            components.html(html_code.format(tweet_divs=additional_tweet_divs, tweet_ids=additional_tweet_ids), height=1200)
 
 
 
