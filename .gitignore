@@ -10,6 +10,7 @@ __pycache__/
 venv/
 env/
 ft/
+JupyterNoteBooks/
 
 # Ignore data folder
 data/

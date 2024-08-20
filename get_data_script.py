@@ -1170,7 +1170,7 @@ def get_tournament_status(player_id, token):
 
     current_tournaments_standings = create_trournament_rank_rewards_table(token)
 
-    current_tournaments_standings.to_csv('data/current_tournaments_standings.csv', index=False)
+    return current_tournaments_standings
 
 def get_latest_file(directory, prefix):
     files = glob.glob(os.path.join(directory, f'{prefix}*.csv'))
@@ -1225,6 +1225,11 @@ def update_bids(driver, token):
     cookies = {cookie['name']: cookie['value'] for cookie in driver.get_cookies()}
     bids_df = print_runtime(get_bids, hero_ids, token, cookies)
     save_df_as_csv(bids_df, 'bids')
+
+def update_tournament_status(driver, token):
+    tournament_standings = print_runtime(get_tournament_status, PLAYER_ID, token)
+    tournament_standings.to_csv('data/current_tournament_standings.csv')
+
 
 # Main Execution Function with Reusable Driver and Token
 
