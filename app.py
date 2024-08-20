@@ -7,40 +7,47 @@ from get_data_script import (
     update_hero_trades, get_tournament_status
 )
 from data_compiler import compile_data
-import time
 import glob
 import os
 import feedparser
-import requests
 import streamlit.components.v1 as components
+from datetime import datetime
 
 ###########################
 # RSS Feed Parsing
 ###########################
 # Set the number of initial tweets to load
-INITIAL_TWEET_COUNT = 10
+INITIAL_TWEET_COUNT = 50
 
-# RSS Feed Parsing
-def extract_tweet_urls_from_rss(feed_url):
-    feed = feedparser.parse(feed_url)
-    tweet_urls = []
-    for entry in feed.entries:
-        if "twitter.com" in entry.link or "x.com" in entry.link:
-            tweet_urls.append(entry.link)
-    return tweet_urls
+# RSS Feed Parsing with sorting by time
+def extract_and_sort_tweets(feed_urls):
+    tweets = []
+    for feed_url in feed_urls:
+        feed = feedparser.parse(feed_url)
+        for entry in feed.entries:
+            if "twitter.com" in entry.link or "x.com" in entry.link:
+                published_time = datetime(*entry.published_parsed[:6])
+                tweets.append({
+                    "url": entry.link,
+                    "published": published_time
+                })
+    
+    # Sort tweets by published time in descending order (latest first)
+    tweets.sort(key=lambda x: x["published"], reverse=True)
+    
+    return [tweet["url"] for tweet in tweets]
 
-# RSS Feed URL
-rss_feed_url = "https://rss.app/feeds/_edUxK8keJWUW97nt.xml"
-tweet_urls = extract_tweet_urls_from_rss(rss_feed_url)
-
-# Initialize tweet display state
-if 'loaded_tweet_count' not in st.session_state:
-    st.session_state.loaded_tweet_count = INITIAL_TWEET_COUNT
+# Combine and sort multiple RSS feed URLs by time
+rss_feed_urls = [
+    "https://rss.app/feeds/AmeRmN5MSkkwKGXN.xml",
+    "https://rss.app/feeds/EDa6EjIpUa04bSdv.xml"
+]
+tweet_urls = extract_and_sort_tweets(rss_feed_urls)
 
 # Function to generate HTML for tweets
-def generate_tweet_html(tweet_urls, start_index=0, count=INITIAL_TWEET_COUNT):
-    tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(start_index, start_index + count)])
-    tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[start_index:start_index + count]])
+def generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT):
+    tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(count)])
+    tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[:count]])
 
     html_code = f"""
     <div id="tweet-container" style="height: 100vh; overflow-y: auto;">
@@ -49,9 +56,9 @@ def generate_tweet_html(tweet_urls, start_index=0, count=INITIAL_TWEET_COUNT):
     <script type="text/javascript">
         var tweetIds = [{tweet_ids}];
         
-        function loadTweets(startIndex) {{
+        function loadTweets() {{
             tweetIds.forEach(function(id, index) {{
-                var tweetElement = document.getElementById('tweet-' + (index + startIndex));
+                var tweetElement = document.getElementById('tweet-' + index);
                 if (tweetElement && !tweetElement.hasChildNodes()) {{
                     twttr.widgets.createTweet(id, tweetElement, {{
                         align: 'center'
@@ -65,11 +72,11 @@ def generate_tweet_html(tweet_urls, start_index=0, count=INITIAL_TWEET_COUNT):
             script.src = "https://platform.twitter.com/widgets.js";
             script.async = true;
             script.onload = function () {{
-                loadTweets({start_index});
+                loadTweets();
             }};
             document.head.appendChild(script);
         }} else {{
-            loadTweets({start_index});
+            loadTweets();
         }}
     </script>
     """
@@ -681,20 +688,13 @@ with col_main:
             st.error("No deck data available.")
 
 
+# Right-hand RSS Feed Sidebar
 with col_sidebar:
     st.subheader("Latest")
 
-    # Initially render the tweet container
-    if st.session_state.loaded_tweet_count == INITIAL_TWEET_COUNT:
-        tweet_html = generate_tweet_html(tweet_urls, start_index=0, count=st.session_state.loaded_tweet_count)
-        components.html(tweet_html, height=1200)
-
-    # "Load More" button to load more tweets
-    if st.session_state.loaded_tweet_count < len(tweet_urls):
-        if st.button("Load More Tweets"):
-            st.session_state.loaded_tweet_count += INITIAL_TWEET_COUNT
-            tweet_html = generate_tweet_html(tweet_urls, start_index=st.session_state.loaded_tweet_count - INITIAL_TWEET_COUNT, count=INITIAL_TWEET_COUNT)
-            components.html(tweet_html, height=0)  # Inject new tweets without re-rendering the container
+    # Render the tweet container with the initial tweets
+    tweet_html = generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT)
+    components.html(tweet_html, height=1400)
 
 # "Refresh Data" Section
 st.sidebar.subheader("Refresh Data")
