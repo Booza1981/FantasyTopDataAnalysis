@@ -390,21 +390,22 @@ def send_graphql_request(query=None, variables=None, token=None, request_type='g
             "variables": variables
         })
         headers = {
-            'accept': '*/*',
-            'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-            'authorization': f'Bearer {token}',
-            'content-type': 'application/json',
-            'origin': 'https://fantasy.top',
-            'priority': 'u=1, i',
-            'referer': 'https://fantasy.top/',
-            'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'cross-site',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
-        }
+                'authorization': f'Bearer {token}',
+                'content-type': 'application/json',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+                'accept': '*/*',
+                'origin': 'https://fantasy.top',
+                'sec-fetch-site': 'cross-site',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-dest': 'empty',
+                'referer': 'https://fantasy.top/',
+                'accept-encoding': 'gzip, deflate, br, zstd',
+                'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+                'sec-ch-ua': '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"'
+            }
+
         response = requests.post(URL_GRAPHQL, headers=headers, data=payload, cookies=cookies)
         response.raise_for_status()
         return response.json()
@@ -673,9 +674,12 @@ def get_hero_stats(handle_list, token):
         return timestamp
         
     def get_hero_data(handle, token):
+        # GraphQL query string
         query_get_hero_by_handle = """
-            query GET_HERO_BY_HANDLE($handle: String!) {
-          heroes: twitter_data_heroes(where: {handle: {_eq: $handle}}) {
+        query GET_HERO_BY_HANDLE($handle: String!) {
+        heroes: twitter_data_heroes(
+            where: {handle: {_eq: $handle}, status: {_eq: "HERO"}}
+        ) {
             followers_count
             is_player
             handle
@@ -683,62 +687,59 @@ def get_hero_stats(handle_list, token):
             name
             profile_image_url_https
             distribution_probability {
-              inflation_degree
+            inflation_degree
             }
             current_score {
-              fantasy_score
-              current_rank
-              views
+            fantasy_score
+            current_rank
+            views
             }
-            score_history(
-              order_by: {created_at: desc}
-              limit: 300
-              where: {is_gliding24h: {_eq: false}}
-            ) {
-              id
-              fantasy_score
-              current_rank
-              created_at
+            score_history(order_by: {created_at: desc}, limit: 300) {
+            id
+            fantasy_score
+            current_rank
+            created_at
             }
             tournament_scores(order_by: {created_at: asc}) {
-              id
-              current_rank
-              views
-              created_at
+            id
+            current_rank
+            views
+            created_at
             }
             tweets(order_by: {views: desc}, where: {type: {_nin: ["Retweet", "Reply"]}}) {
-              post_id
-              bookmarks
-              likes
-              quotes
-              replies
-              retweets
-              views
-              created_at
-              type
-              fire_score
-              impact_score
-              health_score
-              top_interacting_users
+            post_id
+            bookmarks
+            likes
+            quotes
+            replies
+            retweets
+            views
+            created_at
+            type
+            fire_score
+            impact_score
+            health_score
+            top_interacting_users
             }
             cards(limit: 1) {
-              id
-              picture_url
-              rarity
+            id
+            picture_url
+            rarity
             }
             cards_aggregate {
-              aggregate {
+            aggregate {
                 count
-              }
+            }
             }
             trades(limit: 1, order_by: {timestamp: desc}) {
-              id
-              price
+            id
+            price
             }
-            floor: unique_sell_orders(order_by: {lowest_price: asc_nulls_last}, limit: 1) {
-              lowest_price
+            floor: unique_sell_orders(order_by: {lowest_price: asc_nulls_last}, limit: 4) {
+            lowest_price
+            hero_rarity_index
             }
-          }
+        }
         }
         """
         variables = {"handle": handle}
@@ -1112,13 +1113,13 @@ def main():
     driver, token = login()
     try:
         # update_basic_hero_stats(driver, token)
-        update_portfolio(driver, token)
-        update_last_trades(driver, token)
-        update_listings(driver)
+        # update_portfolio(driver, token)
+        # update_last_trades(driver, token)
+        # update_listings(driver)
         update_hero_stats(driver, token)
-        update_hero_trades(driver, token)
-        update_hero_supply(driver, token)
-        update_bids(driver, token)
+        # update_hero_trades(driver, token)
+        # update_hero_supply(driver, token)
+        # update_bids(driver, token)
     finally:
         driver.quit()
 
