@@ -773,7 +773,7 @@ with col_sidebar:
 
 
 # Load your CSV data into a DataFrame
-tournament_status_df = pd.read_csv('data/current_tournaments_standings.csv')
+tournament_status_df = pd.read_csv('data/tournament_standings.csv')
 
 # Group by the 'Description' (which appears to be the competition name)
 grouped_summary = tournament_status_df.groupby('Description').agg({
