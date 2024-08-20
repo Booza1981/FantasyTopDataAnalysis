@@ -15,6 +15,7 @@ import requests
 import streamlit.components.v1 as components
 
 # Tweet Component Class with Custom HTML Rendering
+# Tweet Component Class with Custom HTML Rendering
 class Tweet:
     def __init__(self, url):
         # Use Twitter's oEmbed API
@@ -28,37 +29,35 @@ class Tweet:
         else:
             self.text = f"<p>Failed to fetch tweet from {url}. Status code: {response.status_code}</p>"
 
-    def _repr_html_(self):
-        return self.text
-
-    def component(self):
-        # Set up the HTML with JavaScript for dynamic resizing
-        html_code = f"""
-        <div id="tweet-container" style="max-width: 500px; margin: 0 auto;">
-            {self.text}
-        </div>
-        <script>
-            function resizeIframe(iframe) {{
-                iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
-                iframe.style.width = '100%';
-            }}
-            document.addEventListener("DOMContentLoaded", function() {{
-                const container = document.getElementById('tweet-container');
-                const iframe = container.querySelector('iframe');
-                if (iframe) {{
-                    iframe.onload = function() {{
-                        resizeIframe(iframe);
-                    }};
-                    // Fallback in case onload doesn't fire
-                    setTimeout(function() {{
-                        resizeIframe(iframe);
-                    }}, 1000);
-                }}
-            }});
-        </script>
-        """
-        # The height parameter here is just a placeholder, the actual height will be determined by the script
-        return components.html(html_code, height=600)
+    def component(self, tweet_id):
+        # Render the tweet with dynamic height adjustment
+        return components.html(
+            f"""
+            <div id="{tweet_id}" style="margin-bottom: 10px;">{self.text}</div>
+            <script>
+                window.addEventListener('load', function() {{
+                    var iframe = document.querySelector('#{tweet_id} iframe.twitter-tweet');
+                    function resizeIframe() {{
+                        if (iframe && iframe.contentWindow && iframe.contentWindow.document.body) {{
+                            iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
+                        }}
+                    }}
+                    iframe.onload = resizeIframe;
+                    setTimeout(resizeIframe, 1000); // Fallback in case onload doesn't trigger
+                }});
+            </script>
+            """,
+            height=300,  # Initial height that will be adjusted dynamically
+            scrolling=False
+        )
+    
+# List of Tweet URLs
+tweet_urls = [
+    "https://twitter.com/jack/status/20",
+    "https://twitter.com/Twitter/status/1255542774432063488",
+    "https://x.com/NFTNate_/status/1825528307833876695",
+    "https://x.com/historyinmemes/status/1825070123423781169"
+]
 
 ###########################
 # Functions for Deck layout
@@ -665,18 +664,41 @@ with col_main:
             st.error("No deck data available.")
 
 
+html_code = """
+<div id="tweet-container" style="max-height: 100vh; overflow-y: auto;">
+    <div id="tweet-0"></div>
+    <div id="tweet-1"></div>
+    <div id="tweet-2"></div>
+    <div id="tweet-3"></div>
+</div>
+<script type="text/javascript">
+    // Tweet IDs
+    var tweetIds = ["20", "1255542774432063488", "1825528307833876695", "1825070123423781169"];
+    
+    // Load Twitter widgets.js
+    if (typeof twttr === 'undefined') {
+        var script = document.createElement("script");
+        script.src = "https://platform.twitter.com/widgets.js";
+        script.async = true;
+        script.onload = function () {
+            tweetIds.forEach(function (id, index) {
+                twttr.widgets.createTweet(id, document.getElementById('tweet-' + index), {
+                    align: 'center'
+                }).then(function (el) {
+                    console.log("Tweet loaded: " + id);
+                }).catch(function (err) {
+                    console.error("Failed to load tweet: " + id, err);
+                });
+            });
+        };
+        document.head.appendChild(script);
+    }
+</script>
+"""
 
 # Right-hand RSS Feed Sidebar
 with col_sidebar:
-    st.subheader("Latest News")
-    # Inject the HTML into Streamlit
-    # Example usage of Tweet class
-    t = Tweet("https://twitter.com/OReillyMedia/status/901048172738482176").component()
-    t
-
-
-
-    
+    components.html(html_code, height=800)
 
 
 # "Refresh Data" Section
