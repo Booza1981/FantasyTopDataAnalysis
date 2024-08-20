@@ -121,30 +121,16 @@ def reorder_basic_hero_stats(df):
 
 def merge_dataframes(dataframes):
     # Merge operations
-    merged_supply_listings = dataframes['hero_card_supply'].merge(
-        dataframes['listings'], on='hero_id', how='left'
-    )
-    
-    merged_with_basic_hero_stats = dataframes['basic_hero_stats'].merge(
-        merged_supply_listings, on='hero_handle', how='left'
-    )
+    merged_hero_stats = dataframes['basic_hero_stats'].merge(dataframes['hero_stats'], on='hero_handle', how='left')
+    merged_hero_stats = merged_hero_stats.merge(dataframes['hero_card_supply'], on='hero_id', how='left')
+    merged_hero_stats = merged_hero_stats.merge(dataframes['listings'], on=['hero_id', 'hero_handle'], how='left')
+    merged_hero_stats = merged_hero_stats.merge(dataframes['last_trades'], on=['hero_id'], how='left')
+    dataframes['tournament_scores'].drop(columns=['Unnamed: 0', 'Name', 'Handle'], inplace=True) 
+    merged_hero_stats = merged_hero_stats.merge(dataframes['tournament_scores'], on=['hero_handle'], how='left')
+    merged_hero_stats['hero_id'] = merged_hero_stats['hero_id'].astype(str)
 
-    merged_df = merged_with_basic_hero_stats.merge(
-        dataframes['last_trades'], on='hero_id', how='left'
-    )
-
-    final_merged_df = merged_df.merge(
-        dataframes['tournament_scores'], left_on='hero_handle', right_on='hero_handle', how='left'
-    )
-
-    final_merged_df = final_merged_df.merge(
-        dataframes['hero_stats'][['hero_handle', 'inflation_degree']], on='hero_handle', how='left'
-    )
-
-    final_merged_df['hero_id'] = final_merged_df['hero_id'].astype(str)
-
-    final_merged_df = calculate_value(final_merged_df)
-    return final_merged_df
+    merged_hero_stats = calculate_value(merged_hero_stats)
+    return merged_hero_stats
 
 def save_final_dataframes(final_merged_df, portfolio_scores):
     final_merged_df.to_csv(f'{DATA_FOLDER}/allHeroData.csv', index=False)

@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from get_data_script import (
     login, update_basic_hero_stats, update_portfolio, update_last_trades, 
     update_listings, update_hero_stats, update_hero_supply, update_bids, 
-    update_hero_trades, update_tournament_status
+    update_hero_trades, update_tournament_status, update_star_history
 )
 from data_compiler import compile_data
 import time
@@ -148,6 +148,12 @@ def run_update_and_compile(selected_updates):
             with st.sidebar:
                 st.sidebar.info(st.session_state.update_status)
             update_bids(st.session_state.driver, st.session_state.token)
+
+        if "Update Star History" in selected_updates:
+            st.session_state.update_status = "Updating Star History..."
+            with st.sidebar:
+                st.sidebar.info(st.session_state.update_status)
+            update_star_history(st.session_state.driver, st.session_state.token)
         
         st.session_state.update_status = "Compiling Data..."
         with st.sidebar:
@@ -331,9 +337,59 @@ def apply_hover_highlight():
         </script>
     """, unsafe_allow_html=True)
 
+
 # Load your data
 all_heroes_df = pd.read_csv('data/allHeroData.csv', dtype={'hero_id': str})
 portfolio_df = pd.read_csv('data/portfolio.csv', dtype={'hero_id': str})
+
+
+###########################
+# Functions for Gradient Styling
+###########################
+
+# 1. Calculate the star frequency
+star_counts = all_heroes_df['hero_stars'].value_counts().sort_index(ascending=False)
+star_cumsum = star_counts.cumsum()
+
+# 2. Define gradient colors (adjust to match your app's aesthetic)
+gradient_colors = {
+    7: "#444444",  # Lightest for 7 stars (but still dark)
+    6: "#333333",  # Slightly darker for 6 stars
+    5: "#292929",  # Finer gradient for 5 stars
+    4: "#1f1f1f",  # Even finer gradient for 4 stars
+    3: "#141414",  # Darker still for 3 stars
+    2: "#000000",  # Pure black for 2 star
+}
+    
+
+# 3. Generate CSS styles for the DataFrame rows
+def generate_css_styles(df, star_cumsum, gradient_colors):
+    styles = []
+    for i, row in df.iterrows():
+        rank = row['current_rank']
+        stars = row['hero_stars']
+        for star_level, cutoff in star_cumsum.items():
+            if rank <= cutoff:
+                styles.append(f'background-color: {gradient_colors[star_level]};')
+                break
+    return styles
+
+# 4. Apply styles to the DataFrame HTML
+def style_dataframe_with_gradients(df, star_cumsum, gradient_colors):
+    styles = generate_css_styles(df, star_cumsum, gradient_colors)
+    df_html = df.to_html(escape=False, index=False)
+    
+    for i, style in enumerate(styles):
+        df_html = df_html.replace('<tr>', f'<tr style="{style}">', 1)
+    
+    return df_html
+
+###########################
+# End Functions for Gradient Styling
+###########################
+
+
+
 
 # Create a new column with HTML for images in both DataFrames
 def create_profile_image_links(df):
@@ -475,20 +531,28 @@ if page_selection == "Portfolio Data":
     apply_hover_highlight()
 
     # Display the table with the sticky header
-    st.markdown(f'<div class="dataframe-container">{filtered_df.to_html(escape=False, index=False)}</div>', unsafe_allow_html=True)
-
+    st.markdown('<div class="dataframe-container">{}</div>'.format(filtered_df.to_html(escape=False, index=False)), unsafe_allow_html=True)
+    
+# For the "All Heroes" page
 elif page_selection == "All Heroes":
     
     st.markdown('<div class="sticky-header"><h2>All Heroes</h2></div>', unsafe_allow_html=True)
 
-
     column_groups = all_heroes_column_groups
-    df = all_heroes_df
+    df = all_heroes_df  # Use the correct DataFrame
+
+    # Verify that "Total Value Lowest Price" is not in this DataFrame
+    if 'Total Value Lowest Price' in df.columns:
+        df = df.drop(columns=['Total Value Lowest Price'])
+        print("'Total Value Lowest Price' column was removed.")
+
     default_sort_column = 'current_rank'
     default_sort_ascending = True
 
-    df = handle_filters_and_sorting(df, column_groups, default_sort_column, default_sort_ascending)
+    # Apply sorting
+    df = df.sort_values(by=default_sort_column, ascending=default_sort_ascending)
 
+    # Apply filters and sorting   
     st.sidebar.subheader("Table Customisation")
     
     with st.sidebar.expander("Select Column Groups", expanded=False):
@@ -514,11 +578,17 @@ elif page_selection == "All Heroes":
     selected_columns = [col for col in selected_columns if col in df.columns]
     filtered_df = df[selected_columns]
 
+    print(filtered_df.head())
+
+    styled_html = style_dataframe_with_gradients(filtered_df, star_cumsum, gradient_colors)
+    
     apply_table_styling()
     apply_hover_highlight()
 
-    st.markdown('<div class="dataframe-container">{}</div>'.format(filtered_df.to_html(escape=False, index=False)), unsafe_allow_html=True)
+    st.markdown(f'<div class="dataframe-container">{styled_html}</div>', unsafe_allow_html=True)
+
     
+
 elif page_selection == "Tournament Scores Over Time":
     st.title("Tournament Scores Over Time")
 
@@ -661,7 +731,8 @@ update_options = [
     "Update Hero Stats",
     "Update Hero Trades",
     "Update Hero Supply",
-    "Update Bids"
+    "Update Bids",
+    "Update Star History"
 ]
 selected_updates = st.sidebar.multiselect(
     "Select Updates", 

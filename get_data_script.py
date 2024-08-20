@@ -1011,6 +1011,7 @@ def download_hero_trades(hero_ids, token):
 
 
 def get_last_trades(token):
+    
     query_get_last_trade = """
     query GET_LAST_TRADE {
       indexer_trades(
@@ -1052,6 +1053,65 @@ def get_last_trades(token):
     pivoted_df.reset_index(inplace=True)
     pivoted_df = pivoted_df.rename(columns={'heroId': 'hero_id'})
     return pivoted_df
+
+def get_hero_stars(token):
+
+    QUERY_STAR_HISTORY_TABLE = """
+        query QUERY_STAR_HISTORY_TABLE($limit: Int, $offset: Int) {
+        twitter_data_heroes(
+            limit: $limit
+            offset: $offset
+            order_by: {star_gain: desc_nulls_last}
+            where: {status: {_eq: "HERO"}}
+        ) {
+            id
+            handle
+            profile_image_url_https
+            stars
+            name
+            star_gain
+        }
+        }
+        """
+    
+    def fetch_star_history_data(token, batch_size=20):
+        all_heroes = []
+        offset = 0
+        
+        while True:
+            variables = {
+                "limit": batch_size,
+                "offset": offset
+            }
+
+            response = send_graphql_request(query=QUERY_STAR_HISTORY_TABLE, variables=variables, token=token)
+            
+            if 'errors' in response:
+                print('Errors:', response['errors'])
+                break  # Exit the loop on error
+            
+            heroes = response.get('data', {}).get('twitter_data_heroes', [])
+            
+            if not heroes:
+                break  # Exit the loop if no more heroes are returned
+
+            for hero in heroes:
+                hero_info = {
+                    'id': hero['id'],
+                    'handle': hero['handle'],
+                    'profile_image_url_https': hero['profile_image_url_https'],
+                    'stars': hero['stars'],
+                    'name': hero['name'],
+                    'star_gain': hero['star_gain']
+                }
+                all_heroes.append(hero_info)
+            
+            offset += batch_size  # Move to the next batch
+    
+        return pd.DataFrame(all_heroes)
+    
+    return fetch_star_history_data(token)
+
 
 def get_tournament_status(player_id, token):
     def get_registered_tournament_data(player_id, token):
@@ -1225,6 +1285,11 @@ def update_bids(driver, token):
     cookies = {cookie['name']: cookie['value'] for cookie in driver.get_cookies()}
     bids_df = print_runtime(get_bids, hero_ids, token, cookies)
     save_df_as_csv(bids_df, 'bids')
+
+def update_star_history(driver, token):
+    star_history_df = print_runtime(get_hero_stars, token)
+    save_df_as_csv(star_history_df, 'star_history')
+
 
 def update_tournament_status(driver, token):
     tournament_standings = print_runtime(get_tournament_status, PLAYER_ID, token)
