@@ -7,13 +7,80 @@ from get_data_script import (
     update_hero_trades, update_tournament_status, update_star_history
 )
 from data_compiler import compile_data
-import time
 import glob
 import os
 import feedparser
-import requests
 import streamlit.components.v1 as components
+from datetime import datetime
 
+###########################
+# RSS Feed Parsing
+###########################
+# Set the number of initial tweets to load
+INITIAL_TWEET_COUNT = 50
+
+# RSS Feed Parsing with sorting by time
+def extract_and_sort_tweets(feed_urls):
+    tweets = []
+    for feed_url in feed_urls:
+        feed = feedparser.parse(feed_url)
+        for entry in feed.entries:
+            if "twitter.com" in entry.link or "x.com" in entry.link:
+                published_time = datetime(*entry.published_parsed[:6])
+                tweets.append({
+                    "url": entry.link,
+                    "published": published_time
+                })
+    
+    # Sort tweets by published time in descending order (latest first)
+    tweets.sort(key=lambda x: x["published"], reverse=True)
+    
+    return [tweet["url"] for tweet in tweets]
+
+# Combine and sort multiple RSS feed URLs by time
+rss_feed_urls = [
+    "https://rss.app/feeds/AmeRmN5MSkkwKGXN.xml",
+    "https://rss.app/feeds/EDa6EjIpUa04bSdv.xml"
+]
+tweet_urls = extract_and_sort_tweets(rss_feed_urls)
+
+# Function to generate HTML for tweets
+def generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT):
+    tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(count)])
+    tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls[:count]])
+
+    html_code = f"""
+    <div id="tweet-container" style="height: 100vh; overflow-y: auto;">
+        {tweet_divs}
+    </div>
+    <script type="text/javascript">
+        var tweetIds = [{tweet_ids}];
+        
+        function loadTweets() {{
+            tweetIds.forEach(function(id, index) {{
+                var tweetElement = document.getElementById('tweet-' + index);
+                if (tweetElement && !tweetElement.hasChildNodes()) {{
+                    twttr.widgets.createTweet(id, tweetElement, {{
+                        align: 'center'
+                    }});
+                }}
+            }});
+        }}
+
+        if (typeof twttr === 'undefined') {{
+            var script = document.createElement("script");
+            script.src = "https://platform.twitter.com/widgets.js";
+            script.async = true;
+            script.onload = function () {{
+                loadTweets();
+            }};
+            document.head.appendChild(script);
+        }} else {{
+            loadTweets();
+        }}
+    </script>
+    """
+    return html_code
 
 ###########################
 # Functions for Deck layout
@@ -51,13 +118,8 @@ def display_deck(deck_df):
                 st.write("")
 
 
-# RSS Feed URL
-rss_feed_url = "YOUR_RSS_FEED_URL"  # Replace with your RSS feed URL
-feed = feedparser.parse('https://rss.app/feeds/_edUxK8keJWUW97nt.xml')
 
 
-###########################
-# End Functions for Deck layout
 ###########################
 
 
@@ -89,6 +151,12 @@ def run_update_and_compile(selected_updates):
         st.sidebar.info(st.session_state.update_status)
 
     try:
+        if "Update Tournament Status" in selected_updates:
+            st.session_state.update_status = "Updating Tournament Status..."
+            with st.sidebar:
+                st.sidebar.info(st.session_state.update_status)
+            get_tournament_status(st.session_state.driver, st.session_state.token)
+
         if st.session_state.driver is None or st.session_state.token is None:
             st.session_state.update_status = "Logging in..."
             with st.sidebar:
@@ -695,7 +763,6 @@ if page_selection == "Best Decks":
         st.error("No deck data available.")
 
 
-
 # Load your CSV data into a DataFrame
 tournament_status_df = pd.read_csv('data/current_tournaments_standings.csv')
 
@@ -714,6 +781,14 @@ grouped_summary.columns = ['Competition', 'Number of Decks', 'Total ETH', 'Total
 st.sidebar.subheader("Tournament Summary")
 st.sidebar.dataframe(grouped_summary)
 
+
+# Right-hand RSS Feed Sidebar
+with col_sidebar:
+    st.subheader("Latest")
+
+    # Render the tweet container with the initial tweets
+    tweet_html = generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT)
+    components.html(tweet_html, height=1400)
 
 # "Refresh Data" Section
 st.sidebar.subheader("Refresh Data")

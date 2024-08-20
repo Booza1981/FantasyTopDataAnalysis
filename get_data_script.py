@@ -1009,7 +1009,6 @@ def download_hero_trades(hero_ids, token):
 
     return pd.DataFrame(all_trades_data)
 
-
 def get_last_trades(token):
     
     query_get_last_trade = """
@@ -1249,6 +1248,127 @@ def get_hero_data_list(target_data):
         basic_hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'basic_hero_stats'))
         return basic_hero_stats_df['hero_handle'].to_list()
 
+def get_tournament_status(player_id, token):
+  
+  def get_registered_tournament_data(player_id, token):
+      query_get_registered_tournament_ids = """
+      query GET_REGISTERED_TOURNAMENT_IDS($player_id: String!) {
+        tournaments_current_players(
+          where: {player_id: {_eq: $player_id}}
+          distinct_on: tournament_id
+        ) {
+          tournament_id
+          tournament {
+            id
+            name
+            description
+            start_date
+            end_date
+            is_main
+            league
+            is_visible
+            tournament_number
+            reward_image
+            rewards {
+              type
+              distribution(path: "[0].reward")
+              total_supply
+              total_distribution: distribution
+            }
+            current_players_aggregate(where: {is_registered: {_eq: true}}) {
+              aggregate {
+                count
+              }
+            }
+            players_history_aggregate {
+              aggregate {
+                count
+              }
+            }
+            flags
+            players_history(where: {player_id: {_eq: $player_id}}) {
+              id
+              rank
+              rewards_details
+              score
+            }
+            current_players(where: {player_id: {_eq: $player_id}}) {
+              is_registered
+              rank
+              score
+            }
+          }
+        }
+      }
+      """
+
+      variables = {
+          "player_id": player_id
+      }
+
+      response = send_graphql_request(query=query_get_registered_tournament_ids, variables=variables, token=token)
+      return response
+
+  def extract_registered_tournament_data(response):
+      tournaments = response.get('data', {}).get('tournaments_current_players', [])
+      data = []
+      
+      for tournament_entry in tournaments:
+          tournament = tournament_entry['tournament']
+          description = tournament['description']
+          
+          for player in tournament['current_players']:
+              row = {
+                  'Description': description,
+                  'Deck No': len(data) + 1,  # Assuming Deck No is just a sequential index
+                  'Rank': player['rank']
+              }
+              
+              # Initialize rewards
+              row['ETH'] = 0
+              row['Pack'] = 0
+              row['Gold'] = 0
+              
+              # Check rewards for each type
+              for reward in tournament['rewards']:
+                  total_distribution = reward['total_distribution']
+                  
+                  # Handle total_distribution being a list or a dictionary
+                  if isinstance(total_distribution, list):
+                      for dist in total_distribution:
+                          if dist['start'] <= player['rank'] <= dist['end']:
+                              if reward['type'] == 'ETH':
+                                  row['ETH'] = dist['reward']
+                              elif reward['type'] == 'PACK':
+                                  row['Pack'] = dist['reward']
+                              elif reward['type'] == 'GOLD':
+                                  row['Gold'] = dist['reward']
+                  elif isinstance(total_distribution, dict):
+                      # If it's a dictionary, handle it accordingly
+                      max_value = total_distribution.get('max')
+                      min_value = total_distribution.get('min')
+                      # You can add logic here to handle this case if applicable
+                      # For now, let's skip this as it's not clear how to handle it
+                      continue
+              
+              data.append(row)
+      
+      return pd.DataFrame(data)
+
+  def create_trournament_rank_rewards_table(driver, token):
+      response = get_registered_tournament_data(player_id, token)
+      tournament_standings = extract_registered_tournament_data(response)
+      
+      # Convert the tournament data to a DataFrame (if necessary) and save it as a CSV
+      
+      return tournament_standings
+      #  save_df_as_csv(tournament_standings, 'registered_tournaments')
+
+  current_tournaments_standings = create_trournament_rank_rewards_table(driver, token)
+
+  current_tournaments_standings.to_csv('tournament_standings.csv', index=False)
+
+
 def update_basic_hero_stats(driver, token):
     basic_hero_stats_df = print_runtime(download_basic_hero_stats, token)
     save_df_as_csv(basic_hero_stats_df, 'basic_hero_stats')
@@ -1301,7 +1421,11 @@ def update_tournament_status(driver, token):
 def main():
     driver, token = login()
     try:
+<<<<<<< HEAD
         get_tournament_status(PLAYER_ID, token)
+=======
+        get_tournament_status(PLAYER_ID,token)
+>>>>>>> twitter-embed
         update_basic_hero_stats(driver, token)
         update_portfolio(driver, token)
         update_last_trades(driver, token)
