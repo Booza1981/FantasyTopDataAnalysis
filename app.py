@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from get_data_script import (
     login, update_basic_hero_stats, update_portfolio, update_last_trades, 
     update_listings, update_hero_stats, update_hero_supply, update_bids, 
-    update_hero_trades
+    update_hero_trades, get_tournament_status
 )
 from data_compiler import compile_data
 import time
@@ -14,51 +14,6 @@ import feedparser
 import requests
 import streamlit.components.v1 as components
 
-# Tweet Component Class with Custom HTML Rendering
-class Tweet:
-    def __init__(self, url):
-        # Use Twitter's oEmbed API
-        api = f"https://publish.twitter.com/oembed?url={url}"
-        response = requests.get(api)
-        if response.status_code == 200:
-            try:
-                self.text = response.json().get("html", "")
-            except ValueError:
-                self.text = f"<p>Error loading tweet from {url}</p>"
-        else:
-            self.text = f"<p>Failed to fetch tweet from {url}. Status code: {response.status_code}</p>"
-
-    def _repr_html_(self):
-        return self.text
-
-    def component(self):
-        # Set up the HTML with JavaScript for dynamic resizing
-        html_code = f"""
-        <div id="tweet-container" style="max-width: 500px; margin: 0 auto;">
-            {self.text}
-        </div>
-        <script>
-            function resizeIframe(iframe) {{
-                iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
-                iframe.style.width = '100%';
-            }}
-            document.addEventListener("DOMContentLoaded", function() {{
-                const container = document.getElementById('tweet-container');
-                const iframe = container.querySelector('iframe');
-                if (iframe) {{
-                    iframe.onload = function() {{
-                        resizeIframe(iframe);
-                    }};
-                    // Fallback in case onload doesn't fire
-                    setTimeout(function() {{
-                        resizeIframe(iframe);
-                    }}, 1000);
-                }}
-            }});
-        </script>
-        """
-        # The height parameter here is just a placeholder, the actual height will be determined by the script
-        return components.html(html_code, height=600)
 
 ###########################
 # Functions for Deck layout
@@ -136,6 +91,12 @@ def run_update_and_compile(selected_updates):
             with st.sidebar:
                 st.sidebar.info(st.session_state.update_status)
             st.session_state.driver, st.session_state.token = login()
+
+        if "Update Tournament Scores" in selected_updates:
+            st.session_state.update_status = "Updating Tournament Scores..."
+            with st.sidebar:
+                st.sidebar.info(st.session_state.update_status)
+            get_tournament_status(st.session_state.driver, st.session_state.token)
 
         if "Update Basic Hero Stats" in selected_updates:
             st.session_state.update_status = "Updating Basic Hero Stats..."
@@ -447,8 +408,6 @@ def handle_filters_and_sorting(df, column_groups, default_sort_column, default_s
     return df
 
 
-# Create two main columns: one for content and one for the "right-hand sidebar"
-col_main, col_sidebar = st.columns([3, 1])
 
 # Left-hand Main Content Area
 with col_main:
@@ -666,17 +625,23 @@ with col_main:
 
 
 
-# Right-hand RSS Feed Sidebar
-with col_sidebar:
-    st.subheader("Latest News")
-    # Inject the HTML into Streamlit
-    # Example usage of Tweet class
-    t = Tweet("https://twitter.com/OReillyMedia/status/901048172738482176").component()
-    t
+# Load your CSV data into a DataFrame
+tournament_status_df = pd.read_csv('data/current_tournaments_standings.csv')
 
+# Group by the 'Description' (which appears to be the competition name)
+grouped_summary = tournament_status_df.groupby('Description').agg({
+    'Deck No': 'count',  # Counting number of decks
+    'ETH': 'sum',        # Summing ETH
+    'Pack': 'sum',       # Summing Packs
+    'Gold': 'sum'        # Summing Gold
+}).reset_index()
 
+# Rename the columns for better display
+grouped_summary.columns = ['Competition', 'Number of Decks', 'Total ETH', 'Total Packs', 'Total Gold']
 
-    
+# Display the summary at the top of the app
+st.sidebar.subheader("Tournament Summary")
+st.sidebar.dataframe(grouped_summary)
 
 
 # "Refresh Data" Section
@@ -687,6 +652,7 @@ select_all = st.sidebar.checkbox("Select All")
 
 # Checkboxes for individual updates
 update_options = [
+    "Update Tournament Scores",
     "Update Basic Hero Stats",
     "Update Portfolio",
     "Update Last Trades",
