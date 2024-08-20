@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from get_data_script import (
     login, update_basic_hero_stats, update_portfolio, update_last_trades, 
     update_listings, update_hero_stats, update_hero_supply, update_bids, 
-    update_hero_trades
+    update_hero_trades, get_tournament_status
 )
 from data_compiler import compile_data
 import time
@@ -14,50 +14,25 @@ import feedparser
 import requests
 import streamlit.components.v1 as components
 
-# Tweet Component Class with Custom HTML Rendering
-# Tweet Component Class with Custom HTML Rendering
-class Tweet:
-    def __init__(self, url):
-        # Use Twitter's oEmbed API
-        api = f"https://publish.twitter.com/oembed?url={url}"
-        response = requests.get(api)
-        if response.status_code == 200:
-            try:
-                self.text = response.json().get("html", "")
-            except ValueError:
-                self.text = f"<p>Error loading tweet from {url}</p>"
-        else:
-            self.text = f"<p>Failed to fetch tweet from {url}. Status code: {response.status_code}</p>"
+###########################
+# RSS Feed Parsing
+###########################
 
-    def component(self, tweet_id):
-        # Render the tweet with dynamic height adjustment
-        return components.html(
-            f"""
-            <div id="{tweet_id}" style="margin-bottom: 10px;">{self.text}</div>
-            <script>
-                window.addEventListener('load', function() {{
-                    var iframe = document.querySelector('#{tweet_id} iframe.twitter-tweet');
-                    function resizeIframe() {{
-                        if (iframe && iframe.contentWindow && iframe.contentWindow.document.body) {{
-                            iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 'px';
-                        }}
-                    }}
-                    iframe.onload = resizeIframe;
-                    setTimeout(resizeIframe, 1000); // Fallback in case onload doesn't trigger
-                }});
-            </script>
-            """,
-            height=300,  # Initial height that will be adjusted dynamically
-            scrolling=False
-        )
-    
-# List of Tweet URLs
-tweet_urls = [
-    "https://twitter.com/jack/status/20",
-    "https://twitter.com/Twitter/status/1255542774432063488",
-    "https://x.com/NFTNate_/status/1825528307833876695",
-    "https://x.com/historyinmemes/status/1825070123423781169"
-]
+def extract_tweet_urls_from_rss(feed_url):
+    feed = feedparser.parse(feed_url)
+    tweet_urls = []
+    for entry in feed.entries:
+        # Assuming tweet URLs are in the link field
+        if "twitter.com" in entry.link or "x.com" in entry.link:
+            tweet_urls.append(entry.link)
+    return tweet_urls
+
+# RSS Feed URL
+rss_feed_url = "https://rss.app/feeds/_edUxK8keJWUW97nt.xml"
+tweet_urls = extract_tweet_urls_from_rss(rss_feed_url)
+
+
+
 
 ###########################
 # Functions for Deck layout
@@ -101,8 +76,6 @@ feed = feedparser.parse('https://rss.app/feeds/_edUxK8keJWUW97nt.xml')
 
 
 ###########################
-# End Functions for Deck layout
-###########################
 
 
 # Set page configuration
@@ -130,6 +103,12 @@ def run_update_and_compile(selected_updates):
         st.sidebar.info(st.session_state.update_status)
 
     try:
+        if "Update Tournament Status" in selected_updates:
+            st.session_state.update_status = "Updating Tournament Status..."
+            with st.sidebar:
+                st.sidebar.info(st.session_state.update_status)
+            get_tournament_status(st.session_state.driver, st.session_state.token)
+
         if st.session_state.driver is None or st.session_state.token is None:
             st.session_state.update_status = "Logging in..."
             with st.sidebar:
@@ -665,40 +644,67 @@ with col_main:
 
 
 html_code = """
-<div id="tweet-container" style="max-height: 100vh; overflow-y: auto;">
-    <div id="tweet-0"></div>
-    <div id="tweet-1"></div>
-    <div id="tweet-2"></div>
-    <div id="tweet-3"></div>
+<div id="tweet-container" style="height: 100vh; overflow-y: auto;">
+    {tweet_divs}
 </div>
 <script type="text/javascript">
     // Tweet IDs
-    var tweetIds = ["20", "1255542774432063488", "1825528307833876695", "1825070123423781169"];
+    var tweetIds = [{tweet_ids}];
     
     // Load Twitter widgets.js
-    if (typeof twttr === 'undefined') {
+    if (typeof twttr === 'undefined') {{
         var script = document.createElement("script");
         script.src = "https://platform.twitter.com/widgets.js";
         script.async = true;
-        script.onload = function () {
-            tweetIds.forEach(function (id, index) {
-                twttr.widgets.createTweet(id, document.getElementById('tweet-' + index), {
-                    align: 'center'
-                }).then(function (el) {
-                    console.log("Tweet loaded: " + id);
-                }).catch(function (err) {
-                    console.error("Failed to load tweet: " + id, err);
-                });
-            });
-        };
+        script.onload = function () {{
+            setTimeout(function() {{
+                tweetIds.forEach(function (id, index) {{
+                    var tweetElement = document.getElementById('tweet-' + index);
+                    if (tweetElement) {{
+                        twttr.widgets.createTweet(id, tweetElement, {{
+                            align: 'center'
+                        }}).then(function (el) {{
+                            console.log("Tweet loaded: " + id);
+                        }}).catch(function (err) {{
+                            console.error("Failed to load tweet: " + id, err);
+                        }});
+                    }} else {{
+                        console.error("Tweet container not found for index: " + index);
+                    }}
+                }});
+            }}, 1000);  // Delay to allow the page to fully load
+        }};
         document.head.appendChild(script);
-    }
+    }} else {{
+        setTimeout(function() {{
+            tweetIds.forEach(function (id, index) {{
+                var tweetElement = document.getElementById('tweet-' + index);
+                if (tweetElement) {{
+                    twttr.widgets.createTweet(id, tweetElement, {{
+                        align: 'center'
+                    }}).then(function (el) {{
+                        console.log("Tweet loaded: " + id);
+                    }}).catch(function (err) {{
+                        console.error("Failed to load tweet: " + id, err);
+                    }});
+                }} else {{
+                    console.error("Tweet container not found for index: " + index);
+                }}
+            }});
+        }}, 1000);  // Delay to allow the page to fully load
+    }}
 </script>
 """
 
+# Generate HTML for tweet divs and ids
+tweet_divs = "\n".join([f'<div id="tweet-{i}"></div>' for i in range(len(tweet_urls))])
+tweet_ids = ",".join([f'"{url.split("/")[-1]}"' for url in tweet_urls])
+
 # Right-hand RSS Feed Sidebar
 with col_sidebar:
-    components.html(html_code, height=800)
+    st.subheader("Latest")
+    components.html(html_code.format(tweet_divs=tweet_divs, tweet_ids=tweet_ids), height=800)
+
 
 
 # "Refresh Data" Section
@@ -709,6 +715,7 @@ select_all = st.sidebar.checkbox("Select All")
 
 # Checkboxes for individual updates
 update_options = [
+    "Update Tournament Status",
     "Update Basic Hero Stats",
     "Update Portfolio",
     "Update Last Trades",
