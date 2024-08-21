@@ -39,8 +39,9 @@ def extract_and_sort_tweets(feed_urls):
 
 # Combine and sort multiple RSS feed URLs by time
 rss_feed_urls = [
-    "https://rss.app/feeds/AmeRmN5MSkkwKGXN.xml",
-    "https://rss.app/feeds/EDa6EjIpUa04bSdv.xml"
+    "https://rss.app/feeds/AmeRmN5MSkkwKGXN.xml", # hk
+    "https://rss.app/feeds/EDa6EjIpUa04bSdv.xml", # themolt
+    "https://rss.app/feeds/9B7xDvOc7CaqUm76.xml"  #FantasyTop
 ]
 tweet_urls = extract_and_sort_tweets(rss_feed_urls)
 
@@ -549,7 +550,7 @@ with col_sidebar:
 
     # Render the tweet container with the initial tweets
     tweet_html = generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT)
-    components.html(tweet_html, height=1400)
+    components.html(tweet_html, height=1800)
 
 
 
