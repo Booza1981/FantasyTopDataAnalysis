@@ -1249,7 +1249,6 @@ def get_hero_data_list(target_data):
         return basic_hero_stats_df['hero_handle'].to_list()
 
 def get_tournament_status(player_id, token):
-    
     def get_registered_tournament_data(player_id, token):
         query_get_registered_tournament_ids = """
         query GET_REGISTERED_TOURNAMENT_IDS($player_id: String!) {
@@ -1295,7 +1294,7 @@ def get_tournament_status(player_id, token):
                 current_players(where: {player_id: {_eq: $player_id}}) {
                 is_registered
                 rank
-                scorepyth
+                score
                 }
             }
             }
@@ -1362,11 +1361,11 @@ def get_tournament_status(player_id, token):
         # Convert the tournament data to a DataFrame (if necessary) and save it as a CSV
         
         return tournament_standings
-        #  save_df_as_csv(tournament_standings, 'registered_tournaments')
+        #  save_df_as_csv(tournaments_df, 'registered_tournaments')
 
     current_tournaments_standings = create_trournament_rank_rewards_table(token)
 
-    current_tournaments_standings.to_csv('tournament_standings.csv', index=False)
+    return current_tournaments_standings
 
 
 def update_basic_hero_stats(driver, token):
@@ -1421,15 +1420,15 @@ def update_tournament_status(driver, token):
 def main():
     driver, token = login()
     try:
-        get_tournament_status(PLAYER_ID, token)
-        update_basic_hero_stats(driver, token)
-        update_portfolio(driver, token)
-        update_last_trades(driver, token)
-        update_listings(driver)
-        update_hero_stats(driver, token)
-        update_hero_trades(driver, token)
-        update_hero_supply(driver, token)
-        update_bids(driver, token)
+        update_tournament_status(PLAYER_ID, token)
+    #     update_basic_hero_stats(driver, token)
+    #     update_portfolio(driver, token)
+    #     update_last_trades(driver, token)
+    #     update_listings(driver)
+    #     update_hero_stats(driver, token)
+    #     update_hero_trades(driver, token)
+    #     update_hero_supply(driver, token)
+    #     update_bids(driver, token)
     finally:
         driver.quit()
 

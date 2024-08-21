@@ -466,8 +466,14 @@ def create_profile_image_links(df):
         axis=1
     )
 
+def create_card_image_links(df):
+    return df.apply(
+        lambda x: f'<a href="https://fantasy.top/hero/{x["hero_handle"]}" target="_blank"><img src="{x["picture_url"]}" width="60"></a>',
+        axis=1
+    )
+
 all_heroes_df['Profile Image'] = create_profile_image_links(all_heroes_df)
-portfolio_df['Profile Image'] = create_profile_image_links(portfolio_df)
+portfolio_df['Card Image'] = create_card_image_links(portfolio_df)
 
 # Drop the 'hero_profile_image_url' column as it's no longer needed
 all_heroes_df = all_heroes_df.drop(columns=['hero_profile_image_url'])
@@ -493,7 +499,7 @@ all_heroes_column_groups = {
 
 # Define your column groups for portfolio_df
 portfolio_column_groups = {
-    'Portfolio Info': ['Profile Image', 'hero_name', 'hero_handle', 'rarity'],
+    'Portfolio Info': ['Card Image', 'hero_name', 'hero_handle', 'rarity'],
     'Current Fantasy': ['current_rank', 'fantasy_score', 'gliding_score'],
     'Ownership': ['cards_number', 'listed_cards_number', 'in_deck'],
     'Stars': ['hero_stars'],
@@ -536,6 +542,16 @@ def handle_filters_and_sorting(df, column_groups, default_sort_column, default_s
 
 # Create two main columns: one for content and one for the "right-hand sidebar"
 col_main, col_sidebar = st.columns([3, 1])
+
+# Right-hand RSS Feed Sidebar
+with col_sidebar:
+    st.subheader("Latest")
+
+    # Render the tweet container with the initial tweets
+    tweet_html = generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT)
+    components.html(tweet_html, height=1400)
+
+
 
 # Left-hand Main Content Area
 with col_main:
@@ -763,17 +779,9 @@ with col_main:
         else:
             st.error("No deck data available.")
 
-# Right-hand RSS Feed Sidebar
-with col_sidebar:
-    st.subheader("Latest")
-
-    # Render the tweet container with the initial tweets
-    tweet_html = generate_tweet_html(tweet_urls, count=INITIAL_TWEET_COUNT)
-    components.html(tweet_html, height=1400)
-
 
 # Load your CSV data into a DataFrame
-tournament_status_df = pd.read_csv('data/tournament_standings.csv')
+tournament_status_df = pd.read_csv('data/current_tournament_standings.csv')
 
 # Group by the 'Description' (which appears to be the competition name)
 grouped_summary = tournament_status_df.groupby('Description').agg({
