@@ -155,7 +155,7 @@ def run_update_and_compile(selected_updates):
             st.session_state.update_status = "Updating Tournament Status..."
             with st.sidebar:
                 st.sidebar.info(st.session_state.update_status)
-            get_tournament_status(st.session_state.driver, st.session_state.token)
+            update_tournament_status(st.session_state.driver, st.session_state.token)
 
         if st.session_state.driver is None or st.session_state.token is None:
             st.session_state.update_status = "Logging in..."
