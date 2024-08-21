@@ -20,6 +20,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 from webdriver_manager.chrome import ChromeDriverManager
 from fake_useragent import UserAgent
+import platform
 
 
 # Load environment variables from .env file
@@ -31,14 +32,24 @@ PLAYER_ID = os.getenv("PLAYER_ID")
 URL_GRAPHQL = os.getenv("URL_GRAPHQL")
 URL_REST = os.getenv("URL_REST")
 DATA_FOLDER = os.getenv("DATA_FOLDER")
+DATA_FOLDER = os.path.expanduser(DATA_FOLDER)
 
+# Determine the platform
+is_windows = platform.system().lower() == "windows"
+
+# Expand the tilde only on Unix-like systems
+if DATA_FOLDER.startswith("~") and not is_windows:
+    DATA_FOLDER = os.path.expanduser(DATA_FOLDER)
+else:
+    DATA_FOLDER = os.path.abspath(DATA_FOLDER)
+
+# Create the directory if it doesn't exist
 if not os.path.exists(DATA_FOLDER):
     os.makedirs(DATA_FOLDER)
 
 COOKIES_FILE = 'cookies.pkl'
 SESSION_FILE = 'session.pkl'
 LOCAL_STORAGE_FILE = 'local_storage.pkl'
-
 
 
 # Twitter login details from environment variables
@@ -430,6 +441,33 @@ def send_graphql_request(query=None, variables=None, token=None, request_type='g
         response.raise_for_status()
         return response.json()
 
+def retry_request(func, retries=3, delay=30, *args, **kwargs):
+    """
+    Retry a function call with exponential backoff.
+
+    Parameters:
+    - func: The function to retry.
+    - retries: Maximum number of retries.
+    - delay: Initial delay between retries.
+    - *args, **kwargs: Arguments to pass to the function.
+
+    Returns:
+    - The result of the function call if successful.
+    - None if all retries are exhausted.
+    """
+    for attempt in range(retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            sys.stdout.write(f"\rError: {e}, attempt {attempt + 1}/{retries}")
+            sys.stdout.flush()
+            if attempt < retries - 1:
+                time.sleep(delay * (2 ** attempt))  # Exponential backoff
+            else:
+                sys.stdout.write(f"\rFailed after {retries} attempts\n")
+                sys.stdout.flush()
+    return None
+
 def download_portfolio(token):
     query_get_cards = """
     query GET_CARDS($id: String!, $limit: Int = 100, $offset: Int = 0, $where: i_beta_player_cards_type_bool_exp = {}, $sort_order: String = "") {
@@ -480,10 +518,16 @@ def download_portfolio(token):
               price
             }
           }
+          floor_price
+          bids(limit: 1) {
+            id
+            price
+          }
         }
       }
     }
     """
+    
     variables_get_cards = {
         "id": PLAYER_ID,
         "limit": 50,
@@ -540,6 +584,13 @@ def download_portfolio(token):
                             'hero_rarity_index': trade['hero_rarity_index'],
                             'price': trade['price']
                         } for trade in hero_data['trades']
+                    ],
+                    'floor_price': card_data.get('floor_price'),
+                    'bids': [
+                        {
+                            'bid_id': bid['id'],
+                            'price': bid['price']
+                        } for bid in card_data.get('bids', [])
                     ]
                 }
                 card_list.append(card_info)
@@ -547,7 +598,7 @@ def download_portfolio(token):
         
     all_cards_list = []
     while True:
-        cards_response = send_graphql_request(query_get_cards, variables_get_cards, token)
+        cards_response = send_graphql_request(query=query_get_cards, variables=variables_get_cards, token=token)
         portfolio_list = extract_portfolio_data(cards_response)
         if not portfolio_list:
             break
@@ -854,42 +905,29 @@ def get_hero_supply(hero_id_list, token):
         data = response.get('data', {})
         supply_data = {
             'heroId': hero_id,
-            'rarity1Count': data['rarity1Count']['aggregate']['count'],
-            'rarity2Count': data['rarity2Count']['aggregate']['count'],
-            'rarity3Count': data['rarity3Count']['aggregate']['count'],
-            'rarity4Count': data['rarity4Count']['aggregate']['count'],
-            'burnedCardsCount': data['burnedCardsCount']['aggregate']['count'],
-            'utilityCount': data['utilityCount']['aggregate']['count']
+            # Map the response data to supply_data...
         }
         return pd.DataFrame([supply_data])
-    
-    def get_supply_per_hero_id(url, query, hero_id_list, token, delay=1, max_retries=3):
+
+    def get_supply_per_hero_id(url, query, hero_id_list, token, delay=1, retries=3):
         all_supplies = []
         total_heroes = len(hero_id_list)
         with tqdm(total=total_heroes, desc="Fetching hero data") as pbar:
             for index, hero_id in enumerate(hero_id_list):
                 variables = {"heroId": str(hero_id)}
-                retries = 0
-                while retries < max_retries:
-                    try:
-                        status_message = f"Fetching data for hero {hero_id} ({index+1}/{total_heroes}), attempt {retries+1} "
-                        sys.stdout.write('\r' + status_message)
-                        sys.stdout.flush()
-                        response = send_graphql_request(query=query, variables=variables, token=token)
-                        supply_df = process_get_supply_per_hero_id(response, hero_id)
-                        all_supplies.append(supply_df)
-                        sys.stdout.write(f"\rSuccessfully fetched data for hero {hero_id}          \n")
-                        sys.stdout.flush()
-                        time.sleep(delay)
-                        break
-                    except Exception as e:
-                        sys.stdout.write(f"\rError fetching data for hero {hero_id}: {e}          \r")
-                        sys.stdout.flush()
-                        retries += 1
-                        time.sleep(delay * retries)
-                        if retries >= max_retries:
-                            sys.stdout.write(f"\rFailed to fetch data for hero {hero_id} after {max_retries} attempts\n")
-                            sys.stdout.flush()
+                response = retry_request(
+                    func=send_graphql_request, 
+                    retries=retries, 
+                    delay=delay, 
+                    query=query, 
+                    variables=variables, 
+                    token=token
+                )
+                if response:
+                    supply_df = process_get_supply_per_hero_id(response, hero_id)
+                    all_supplies.append(supply_df)
+                    sys.stdout.write(f"\rSuccessfully fetched data for hero {hero_id}          \n")
+                    sys.stdout.flush()
                 pbar.update(1)
         return pd.concat(all_supplies, ignore_index=True)
     
@@ -897,8 +935,9 @@ def get_hero_supply(hero_id_list, token):
     all_hero_supplies_df = all_hero_supplies_df.rename(columns={'heroId': 'hero_id'})
     return all_hero_supplies_df
 
+
 def get_bids(hero_id_list, token, cookies):
-    def get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay=2, max_retries=3):
+    def get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay=2, retries=3):
         hero_bids = {'hero_id': hero_id}
         params = {
             'hero_id': hero_id,
@@ -906,28 +945,24 @@ def get_bids(hero_id_list, token, cookies):
             'include_orderbook': 'true',
             'include_personal_bids': 'true',
         }
-        retries = 0
-        while retries < max_retries:
-            try:
-                status_message = f"Fetching data for hero {hero_id} rarity {rarity}, attempt {retries + 1}"
-                tqdm.write(status_message)
-                response = send_graphql_request(request_type='rest', params=params, token=token, cookies=cookies)
-                highest_bid = 0
-                if response.get('orderbook_bids'):
-                    highest_bid = max(int(bid['price']) for bid in response['orderbook_bids'])
-                    highest_bid /= 1e18
-                hero_bids[f'rarity{rarity}HighestBid'] = highest_bid
-                break
-            except Exception as e:
-                tqdm.write(f"Error fetching data for hero {hero_id} rarity {rarity}: {e}, attempt {retries + 1}")
-                retries += 1
-                time.sleep(delay * retries)
-        if retries >= max_retries:
-            tqdm.write(f"Failed to fetch data for hero {hero_id} rarity {rarity} after {max_retries} attempts")
+        
+        def request_func():
+            response = send_graphql_request(request_type='rest', params=params, token=token, cookies=cookies)
+            highest_bid = 0
+            if response.get('orderbook_bids'):
+                highest_bid = max(int(bid['price']) for bid in response['orderbook_bids'])
+                highest_bid /= 1e18
+            hero_bids[f'rarity{rarity}HighestBid'] = highest_bid
+            return hero_bids
+        
+        result = retry_request(func=request_func, retries=retries, delay=delay)
+        if result is None:
+            tqdm.write(f"Failed to fetch data for hero {hero_id} rarity {rarity} after {retries} attempts")
             hero_bids[f'rarity{rarity}HighestBid'] = None
+        
         return hero_bids
     
-    def collect_highest_bids(hero_id_list, token, cookies, delay=7, max_retries=3):
+    def collect_highest_bids(hero_id_list, token, cookies, delay=7, retries=3):
         data = []
         total_heroes = len(hero_id_list)
 
@@ -935,7 +970,7 @@ def get_bids(hero_id_list, token, cookies):
         for rarity in range(4, 0, -1):  # Start from rarity 4 to 1
             tqdm.write(f"Processing rarity {rarity} for all heroes...")
             for index, hero_id in tqdm(enumerate(hero_id_list), total=total_heroes, desc=f"Rarity {rarity} Progress"):
-                hero_bids = get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay, max_retries)
+                hero_bids = get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay, retries)
                 if hero_id in [d.get('hero_id') for d in data]:
                     # Update the existing entry for this hero_id
                     existing_data = next(item for item in data if item['hero_id'] == hero_id)
@@ -949,6 +984,7 @@ def get_bids(hero_id_list, token, cookies):
     
     highest_bids_df = collect_highest_bids(hero_id_list, token, cookies)
     return highest_bids_df
+
 
 def download_hero_trades(hero_ids, token):
     all_trades_data = []
@@ -969,45 +1005,33 @@ def download_hero_trades(hero_ids, token):
     }
     """
 
-    headers = {
-        'authorization': f'Bearer {token}',
-        'content-type': 'application/json'
-    }
-
     timestamp = (datetime.utcnow() - timedelta(days=30)).isoformat()
 
-    for hero_id in tqdm(hero_ids, desc="Fetching hero trades data"):
-        variables = {
-            "hero_id": str(hero_id),
-            "timestamp": timestamp
-        }
-        payload = {
-            "query": query,
-            "variables": variables,
-            "operationName": "GET_HERO_TRADES_CHART"
-        }
+    with tqdm(hero_ids, desc="Fetching hero trades data") as pbar:
+        for hero_id in pbar:
+            variables = {
+                "hero_id": str(hero_id),
+                "timestamp": timestamp
+            }
 
-        try:
-            response = requests.post(URL_GRAPHQL, headers=headers, json=payload)
-            response_data = response.json()
+            def request_func():
+                response_data = send_graphql_request(query=query, variables=variables, token=token)
+                
+                if 'errors' in response_data:
+                    raise ValueError(f"Error fetching hero trades for hero_id {hero_id}: {response_data['errors']}")
 
-            if 'errors' in response_data:
-                print(f"Error fetching hero trades for hero_id {hero_id}: {response_data['errors']}")
-                continue
-
-            trades = response_data.get('data', {}).get('indexer_trades', [])
-            for trade in trades:
-                trade_data = {
-                    'hero_id': hero_id,
-                    'timestamp': trade['timestamp'],
-                    'rarity': trade['card']['rarity'],
-                    'price': trade['price']
-                }
-                all_trades_data.append(trade_data)
-
-        except Exception as e:
-            print(f"Failed to fetch data for hero_id {hero_id}: {e}")
-
+                trades = response_data.get('data', {}).get('indexer_trades', [])
+                for trade in trades:
+                    trade_data = {
+                        'hero_id': hero_id,
+                        'timestamp': trade['timestamp'],
+                        'rarity': trade['card']['rarity'],
+                        'price': trade['price']
+                    }
+                    all_trades_data.append(trade_data)
+            
+            retry_request(func=request_func, retries=3, delay=2)
+    
     return pd.DataFrame(all_trades_data)
 
 def get_last_trades(token):
@@ -1242,12 +1266,12 @@ def get_hero_data_list(target_data):
     assert target_data in ['id', 'handle'], f"Invalid target_data: {target_data}. Expected 'id' or 'handle'."
     
     if target_data == 'id':
-        hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'hero_stats'))
-        return hero_stats_df['hero_id'].to_list()
+        hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'star_history'))
+        return hero_stats_df['id'].to_list()
     elif target_data == "handle":
-        basic_hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'basic_hero_stats'))
-        return basic_hero_stats_df['hero_handle'].to_list()
-
+        basic_hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'star_history'))
+        return basic_hero_stats_df['handle'].to_list()
+    
 def get_tournament_status(player_id, token):
     def get_registered_tournament_data(player_id, token):
         query_get_registered_tournament_ids = """
@@ -1418,15 +1442,17 @@ def update_tournament_status(driver, token):
 
 def main():
     driver, token = login()
+    print(token)
     try:
-        update_tournament_status(PLAYER_ID, token)
-        update_basic_hero_stats(driver, token)
-        update_portfolio(driver, token)
-        update_last_trades(driver, token)
-        update_listings(driver)
-        update_hero_stats(driver, token)
-        update_hero_trades(driver, token)
-        update_hero_supply(driver, token)
+        # update_star_history(driver, token)
+        # update_tournament_status(PLAYER_ID, token)
+        # update_basic_hero_stats(driver, token)
+        # update_portfolio(driver, token) # not working
+        # update_last_trades(driver, token)
+        # update_listings(driver)
+        # update_hero_stats(driver, token)
+        # update_hero_trades(driver, token)
+        # update_hero_supply(driver, token)
         update_bids(driver, token)
     finally:
         driver.quit()
