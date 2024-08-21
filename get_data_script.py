@@ -1444,15 +1444,15 @@ def main():
     driver, token = login()
     print(token)
     try:
-        # update_star_history(driver, token)
-        # update_tournament_status(PLAYER_ID, token)
-        # update_basic_hero_stats(driver, token)
-        # update_portfolio(driver, token) # not working
-        # update_last_trades(driver, token)
-        # update_listings(driver)
-        # update_hero_stats(driver, token)
-        # update_hero_trades(driver, token)
-        # update_hero_supply(driver, token)
+        update_star_history(driver, token)
+        update_tournament_status(PLAYER_ID, token)
+        update_basic_hero_stats(driver, token)
+        update_portfolio(driver, token) # not working
+        update_last_trades(driver, token)
+        update_listings(driver)
+        update_hero_stats(driver, token)
+        update_hero_trades(driver, token)
+        update_hero_supply(driver, token)
         update_bids(driver, token)
     finally:
         driver.quit()
