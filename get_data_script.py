@@ -32,6 +32,9 @@ URL_GRAPHQL = os.getenv("URL_GRAPHQL")
 URL_REST = os.getenv("URL_REST")
 DATA_FOLDER = os.getenv("DATA_FOLDER")
 
+if not os.path.exists(DATA_FOLDER):
+    os.makedirs(DATA_FOLDER)
+
 COOKIES_FILE = 'cookies.pkl'
 SESSION_FILE = 'session.pkl'
 LOCAL_STORAGE_FILE = 'local_storage.pkl'
