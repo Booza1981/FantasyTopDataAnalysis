@@ -381,7 +381,6 @@ def download_listings(driver):
     final_df = final_df.rename(columns={'heroId': 'hero_id'})
     return final_df
 
-
 def send_graphql_request(query=None, variables=None, token=None, request_type='graphql', params=None, cookies=None):
     if request_type == 'graphql':
         payload = json.dumps({
@@ -948,7 +947,6 @@ def get_bids(hero_id_list, token, cookies):
     highest_bids_df = collect_highest_bids(hero_id_list, token, cookies)
     return highest_bids_df
 
-
 def download_hero_trades(hero_ids, token):
     all_trades_data = []
 
@@ -1110,7 +1108,6 @@ def get_hero_stars(token):
         return pd.DataFrame(all_heroes)
     
     return fetch_star_history_data(token)
-
 
 def get_tournament_status(player_id, token):
     def get_registered_tournament_data(player_id, token):
@@ -1367,7 +1364,6 @@ def get_tournament_status(player_id, token):
 
     return current_tournaments_standings
 
-
 def update_basic_hero_stats(driver, token):
     basic_hero_stats_df = print_runtime(download_basic_hero_stats, token)
     save_df_as_csv(basic_hero_stats_df, 'basic_hero_stats')
@@ -1420,14 +1416,14 @@ def update_tournament_status(driver, token):
 def main():
     driver, token = login()
     try:
-        # update_tournament_status(PLAYER_ID, token)
-        # update_basic_hero_stats(driver, token)
-        # update_portfolio(driver, token)
-        # update_last_trades(driver, token)
-        # update_listings(driver)
-        # update_hero_stats(driver, token)
-        # update_hero_trades(driver, token)
-        # update_hero_supply(driver, token)
+        update_tournament_status(PLAYER_ID, token)
+        update_basic_hero_stats(driver, token)
+        update_portfolio(driver, token)
+        update_last_trades(driver, token)
+        update_listings(driver)
+        update_hero_stats(driver, token)
+        update_hero_trades(driver, token)
+        update_hero_supply(driver, token)
         update_bids(driver, token)
     finally:
         driver.quit()
