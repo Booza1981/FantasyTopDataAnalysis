@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from get_data_script import (
     login, update_basic_hero_stats, update_portfolio, update_last_trades, 
     update_listings, update_hero_stats, update_hero_supply, update_bids, 
-    update_hero_trades, update_tournament_status, update_star_history
+    update_hero_trades, update_tournament_status, update_star_history, DATA_FOLDER
 )
 from data_compiler import compile_data
 import glob
@@ -408,8 +408,8 @@ def apply_hover_highlight():
 
 
 # Load your data
-all_heroes_df = pd.read_csv('data/allHeroData.csv', dtype={'hero_id': str})
-portfolio_df = pd.read_csv('data/portfolio.csv', dtype={'hero_id': str})
+all_heroes_df = pd.read_csv(DATA_FOLDER + '/allHeroData.csv', dtype={'hero_id': str})
+portfolio_df = pd.read_csv(DATA_FOLDER + '/portfolio.csv', dtype={'hero_id': str})
 
 
 ###########################
@@ -782,7 +782,7 @@ with col_main:
 
 
 # Load your CSV data into a DataFrame
-tournament_status_df = pd.read_csv('data/current_tournament_standings.csv')
+tournament_status_df = pd.read_csv(DATA_FOLDER + '/current_tournament_standings.csv')
 
 # Group by the 'Description' (which appears to be the competition name)
 grouped_summary = tournament_status_df.groupby('Description').agg({

@@ -1,3 +1,6 @@
 pip install -r requirements.txt
 
+streamlit app requires data to work.
+run get_data_script.py followed by data_compiler.py
+
 streamlit run app.py

@@ -870,23 +870,23 @@ def get_hero_supply(hero_id_list, token):
                 retries = 0
                 while retries < max_retries:
                     try:
-                        status_message = f"Fetching data for hero {hero_id} ({index+1}/{total_heroes}), attempt {retries+1}"
-                        sys.stdout.write(status_message)
+                        status_message = f"Fetching data for hero {hero_id} ({index+1}/{total_heroes}), attempt {retries+1} "
+                        sys.stdout.write('\r' + status_message)
                         sys.stdout.flush()
                         response = send_graphql_request(query=query, variables=variables, token=token)
                         supply_df = process_get_supply_per_hero_id(response, hero_id)
                         all_supplies.append(supply_df)
-                        sys.stdout.write(f"Successfully fetched data for hero {hero_id}          \n")
+                        sys.stdout.write(f"\rSuccessfully fetched data for hero {hero_id}          \n")
                         sys.stdout.flush()
                         time.sleep(delay)
                         break
                     except Exception as e:
-                        sys.stdout.write(f"Error fetching data for hero {hero_id}: {e}          \r")
+                        sys.stdout.write(f"\rError fetching data for hero {hero_id}: {e}          \r")
                         sys.stdout.flush()
                         retries += 1
                         time.sleep(delay * retries)
                         if retries >= max_retries:
-                            sys.stdout.write(f"Failed to fetch data for hero {hero_id} after {max_retries} attempts\n")
+                            sys.stdout.write(f"\rFailed to fetch data for hero {hero_id} after {max_retries} attempts\n")
                             sys.stdout.flush()
                 pbar.update(1)
         return pd.concat(all_supplies, ignore_index=True)
@@ -896,51 +896,52 @@ def get_hero_supply(hero_id_list, token):
     return all_hero_supplies_df
 
 def get_bids(hero_id_list, token, cookies):
-    def get_highest_bids_for_hero(hero_id, token, cookies, delay=2, max_retries=3):
+    def get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay=2, max_retries=3):
         hero_bids = {'hero_id': hero_id}
-        for rarity in range(1, 5):
-            params = {
-                'hero_id': hero_id,
-                'rarity': rarity,
-                'include_orderbook': 'true',
-                'include_personal_bids': 'true',
-            }
-            retries = 0
-            while retries < max_retries:
-                try:
-                    status_message = f"Fetching data for hero {hero_id} rarity {rarity}, attempt {retries + 1}\r"
-                    sys.stdout.write(status_message)
-                    sys.stdout.flush()
-                    response = send_graphql_request(request_type='rest', params=params, token=token, cookies=cookies)
-                    highest_bid = 0
-                    if response.get('orderbook_bids'):
-                        highest_bid = max(int(bid['price']) for bid in response['orderbook_bids'])
-                        highest_bid /= 1e18
-                    hero_bids[f'rarity{rarity}HighestBid'] = highest_bid
-                    break
-                except Exception as e:
-                    sys.stdout.write(f"Error fetching data for hero {hero_id} rarity {rarity}: {e}, attempt {retries + 1}\r")
-                    sys.stdout.flush()
-                    retries += 1
-                    time.sleep(delay * retries)
-            if retries >= max_retries:
-                sys.stdout.write(f"Failed to fetch data for hero {hero_id} rarity {rarity} after {max_retries} attempts\n")
-                sys.stdout.flush()
-                hero_bids[f'rarity{rarity}HighestBid'] = None
+        params = {
+            'hero_id': hero_id,
+            'rarity': rarity,
+            'include_orderbook': 'true',
+            'include_personal_bids': 'true',
+        }
+        retries = 0
+        while retries < max_retries:
+            try:
+                status_message = f"Fetching data for hero {hero_id} rarity {rarity}, attempt {retries + 1}"
+                tqdm.write(status_message)
+                response = send_graphql_request(request_type='rest', params=params, token=token, cookies=cookies)
+                highest_bid = 0
+                if response.get('orderbook_bids'):
+                    highest_bid = max(int(bid['price']) for bid in response['orderbook_bids'])
+                    highest_bid /= 1e18
+                hero_bids[f'rarity{rarity}HighestBid'] = highest_bid
+                break
+            except Exception as e:
+                tqdm.write(f"Error fetching data for hero {hero_id} rarity {rarity}: {e}, attempt {retries + 1}")
+                retries += 1
+                time.sleep(delay * retries)
+        if retries >= max_retries:
+            tqdm.write(f"Failed to fetch data for hero {hero_id} rarity {rarity} after {max_retries} attempts")
+            hero_bids[f'rarity{rarity}HighestBid'] = None
         return hero_bids
     
     def collect_highest_bids(hero_id_list, token, cookies, delay=7, max_retries=3):
         data = []
         total_heroes = len(hero_id_list)
-        for index, hero_id in enumerate(hero_id_list):
-            status_message = f"Processing hero {hero_id} ({index + 1}/{total_heroes})...\r"
-            sys.stdout.write(status_message)
-            sys.stdout.flush()
-            hero_bids = get_highest_bids_for_hero(hero_id, token, cookies, delay, max_retries)
-            data.append(hero_bids)
-            sys.stdout.write(f"Completed {index + 1} out of {total_heroes}\n")
-            sys.stdout.flush()
-            time.sleep(delay)
+
+        # Iterate through rarities first
+        for rarity in range(4, 0, -1):  # Start from rarity 4 to 1
+            tqdm.write(f"Processing rarity {rarity} for all heroes...")
+            for index, hero_id in tqdm(enumerate(hero_id_list), total=total_heroes, desc=f"Rarity {rarity} Progress"):
+                hero_bids = get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay, max_retries)
+                if hero_id in [d.get('hero_id') for d in data]:
+                    # Update the existing entry for this hero_id
+                    existing_data = next(item for item in data if item['hero_id'] == hero_id)
+                    existing_data.update(hero_bids)
+                else:
+                    data.append(hero_bids)
+                time.sleep(delay)
+        
         highest_bids_df = pd.DataFrame(data)
         return highest_bids_df
     
@@ -1419,14 +1420,14 @@ def update_tournament_status(driver, token):
 def main():
     driver, token = login()
     try:
-        update_tournament_status(PLAYER_ID, token)
-        update_basic_hero_stats(driver, token)
-        update_portfolio(driver, token)
-        update_last_trades(driver, token)
-        update_listings(driver)
-        update_hero_stats(driver, token)
-        update_hero_trades(driver, token)
-        update_hero_supply(driver, token)
+        # update_tournament_status(PLAYER_ID, token)
+        # update_basic_hero_stats(driver, token)
+        # update_portfolio(driver, token)
+        # update_last_trades(driver, token)
+        # update_listings(driver)
+        # update_hero_stats(driver, token)
+        # update_hero_trades(driver, token)
+        # update_hero_supply(driver, token)
         update_bids(driver, token)
     finally:
         driver.quit()
