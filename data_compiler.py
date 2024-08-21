@@ -3,9 +3,8 @@ import re
 import pandas as pd
 from datetime import datetime
 import numpy as np
+from get_data_script import DATA_FOLDER
 
-# Constants
-DATA_FOLDER = r'C:\Users\beuzi\OneDrive\Jupyter Notebooks\FantasyTop\data'
 
 TOURNAMENT_COLUMNS = [
     'Main 12', 'Main 11', 'Main 10', 'Main 9', 'Main 8', 'Main 7', 'Main 5', 'Main 4'
