@@ -30,13 +30,12 @@ load_dotenv()
 PLAYER_ID = os.getenv("PLAYER_ID")
 URL_GRAPHQL = os.getenv("URL_GRAPHQL")
 URL_REST = os.getenv("URL_REST")
-DATA_FOLDER = 'data'
+DATA_FOLDER = os.getenv("DATA_FOLDER")
 
 COOKIES_FILE = 'cookies.pkl'
 SESSION_FILE = 'session.pkl'
 LOCAL_STORAGE_FILE = 'local_storage.pkl'
 
-print(f"DATA_FOLDER is set to: {DATA_FOLDER}")
 
 
 # Twitter login details from environment variables
