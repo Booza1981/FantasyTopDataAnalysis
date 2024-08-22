@@ -905,29 +905,42 @@ def get_hero_supply(hero_id_list, token):
         data = response.get('data', {})
         supply_data = {
             'heroId': hero_id,
-            # Map the response data to supply_data...
+            'rarity1Count': data['rarity1Count']['aggregate']['count'],
+            'rarity2Count': data['rarity2Count']['aggregate']['count'],
+            'rarity3Count': data['rarity3Count']['aggregate']['count'],
+            'rarity4Count': data['rarity4Count']['aggregate']['count'],
+            'burnedCardsCount': data['burnedCardsCount']['aggregate']['count'],
+            'utilityCount': data['utilityCount']['aggregate']['count']
         }
         return pd.DataFrame([supply_data])
-
-    def get_supply_per_hero_id(url, query, hero_id_list, token, delay=1, retries=3):
+    
+    def get_supply_per_hero_id(url, query, hero_id_list, token, delay=1, max_retries=3):
         all_supplies = []
         total_heroes = len(hero_id_list)
         with tqdm(total=total_heroes, desc="Fetching hero data") as pbar:
             for index, hero_id in enumerate(hero_id_list):
                 variables = {"heroId": str(hero_id)}
-                response = retry_request(
-                    func=send_graphql_request, 
-                    retries=retries, 
-                    delay=delay, 
-                    query=query, 
-                    variables=variables, 
-                    token=token
-                )
-                if response:
-                    supply_df = process_get_supply_per_hero_id(response, hero_id)
-                    all_supplies.append(supply_df)
-                    sys.stdout.write(f"\rSuccessfully fetched data for hero {hero_id}          \n")
-                    sys.stdout.flush()
+                retries = 0
+                while retries < max_retries:
+                    try:
+                        status_message = f"Fetching data for hero {hero_id} ({index+1}/{total_heroes}), attempt {retries+1} "
+                        sys.stdout.write('\r' + status_message)
+                        sys.stdout.flush()
+                        response = send_graphql_request(query=query, variables=variables, token=token)
+                        supply_df = process_get_supply_per_hero_id(response, hero_id)
+                        all_supplies.append(supply_df)
+                        sys.stdout.write(f"\rSuccessfully fetched data for hero {hero_id}          \n")
+                        sys.stdout.flush()
+                        time.sleep(delay)
+                        break
+                    except Exception as e:
+                        sys.stdout.write(f"\rError fetching data for hero {hero_id}: {e}          \r")
+                        sys.stdout.flush()
+                        retries += 1
+                        time.sleep(delay * retries)
+                        if retries >= max_retries:
+                            sys.stdout.write(f"\rFailed to fetch data for hero {hero_id} after {max_retries} attempts\n")
+                            sys.stdout.flush()
                 pbar.update(1)
         return pd.concat(all_supplies, ignore_index=True)
     
