@@ -35,6 +35,27 @@ URL_REST = os.getenv("URL_REST")
 DATA_FOLDER = os.getenv("DATA_FOLDER")
 DATA_FOLDER = os.path.expanduser(DATA_FOLDER)
 
+
+# Required environment variables
+required_env_vars = [
+    'TWITTER_USERNAME',
+    'TWITTER_PASSWORD',
+    'PLAYER_ID',
+    'URL_GRAPHQL',
+    'URL_REST',
+    'DATA_FOLDER',
+]
+
+# Check if all required environment variables are set
+missing_env_vars = [var for var in required_env_vars if not os.getenv(var)]
+
+if missing_env_vars:
+    print(f"Error: Missing required environment variables: {', '.join(missing_env_vars)}")
+    print("Please ensure all required environment variables are set.")
+    sys.exit(1)  # Exit the script if any environment variables are missing
+
+# If all environment variables are loaded, proceed with the rest of the script
+
 # Determine the platform
 is_windows = platform.system().lower() == "windows"
 
@@ -230,10 +251,10 @@ def check_login_success(driver):
         )
         
         if has_children:
-            print("Login successful: The element has children.")
+            print("Login check successful: The element has children.")
             return True
         else:
-            print("Login failed: The element does not have children.")
+            print("Login check failed: The element does not have children.")
             return False
         
     except TimeoutException:
