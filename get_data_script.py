@@ -19,6 +19,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
 from fake_useragent import UserAgent
 import platform
 
@@ -161,6 +162,7 @@ def get_random_user_agent():
     return ua.random
 
 def setup_driver():
+    
     options = webdriver.ChromeOptions()
     options.add_argument(f"user-agent={get_random_user_agent()}")
     options.add_argument("--headless")
@@ -171,7 +173,8 @@ def setup_driver():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
-    driver = webdriver.Chrome(options=options)
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
     return driver
 
 

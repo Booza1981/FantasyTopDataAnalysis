@@ -124,8 +124,9 @@ def merge_dataframes(dataframes):
     merged_hero_stats = merged_hero_stats.merge(dataframes['hero_card_supply'], on='hero_id', how='left')
     merged_hero_stats = merged_hero_stats.merge(dataframes['listings'], on=['hero_id', 'hero_handle'], how='left')
     merged_hero_stats = merged_hero_stats.merge(dataframes['last_trades'], on=['hero_id'], how='left')
-    dataframes['tournament_scores'].drop(columns=['Unnamed: 0', 'Name', 'Handle'], inplace=True) 
-    merged_hero_stats = merged_hero_stats.merge(dataframes['tournament_scores'], on=['hero_handle'], how='left')
+    dataframes['tournament_scores'].drop(columns=['Name'], inplace=True) 
+    merged_hero_stats = merged_hero_stats.merge(dataframes['tournament_scores'], left_on='hero_handle', right_on='Handle', how='left')
+    merged_hero_stats.drop(columns=['Handle'], inplace=True)
     merged_hero_stats.drop_duplicates(subset=['hero_handle'], inplace=True)
     merged_hero_stats['hero_id'] = merged_hero_stats['hero_id'].astype(str)
 
