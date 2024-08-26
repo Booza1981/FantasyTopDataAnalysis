@@ -1,6 +1,104 @@
-pip install -r requirements.txt
+# FantasyTop Data Analysis
 
-streamlit app requires data to work.
-run get_data_script.py followed by data_compiler.py
+This repository contains a Streamlit application designed for analyzing FantasyTop data. The application provides various tools for retrieving, processing, and visualizing data related to the FantasyTop platform.
 
-streamlit run app.py
+## Features
+
+- **Manual Data Collection**: Trigger updates for various datasets directly from the Streamlit application.
+- **Data Storage**: All collected data is stored locally in the specified `DATA_FOLDER`.
+- **GraphQL and REST API Integration**: Fetch data from FantasyTop using both GraphQL and REST APIs.
+- **Environment Variable Management**: Configure your application easily with environment variables.
+
+## Prerequisites
+
+Before running the application, make sure you have the following installed:
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+
+## Setup
+
+1. **Clone the Repository:**
+
+   ```bash
+   git clone https://github.com/Booza1981/FantasyTopDataAnalysis.git
+   cd FantasyTopDataAnalysis
+   ```
+
+2. **Create a `.env` File:**
+
+   Copy the `.env.example` file to `.env` and fill in the required environment variables.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit the `.env` file to include your specific credentials and settings:
+
+   ```ini
+   TWITTER_USERNAME=your_twitter_username
+   TWITTER_PASSWORD=your_twitter_password
+   PLAYER_ID=your_player_id
+   URL_GRAPHQL=https://fantasy-top.hasura.app/v1/graphql
+   URL_REST=https://fantasy.top/api/bids/get-bid-orders
+   DATA_FOLDER=/app/data
+   GITHUB_PAT=your_github_pat
+   ```
+
+3. **Run the Application Using Docker Compose:**
+
+   Build and run the Docker container:
+
+   ```bash
+   docker-compose up --build
+   ```
+
+   The application will be available at `http://localhost:8501`.
+
+## Environment Variables
+
+The application uses several environment variables to manage configuration:
+
+- `TWITTER_USERNAME`: Your Twitter username for logging into FantasyTop.
+- `TWITTER_PASSWORD`: Your Twitter password.
+- `PLAYER_ID`: The player ID associated with your FantasyTop account.
+- `URL_GRAPHQL`: The GraphQL endpoint for FantasyTop.
+- `URL_REST`: The REST API endpoint for FantasyTop bids.
+- `DATA_FOLDER`: The folder where data will be stored (e.g., `/app/data` in Docker).
+- `GITHUB_PAT`: Your GitHub Personal Access Token for accessing private repositories.
+
+### Example `.env` File
+
+Here’s an example of what your `.env` file might look like:
+
+```ini
+TWITTER_USERNAME=your_twitter_username
+TWITTER_PASSWORD=your_twitter_password
+PLAYER_ID=0xDC0c171F4DB2790e565295c5287bCa9D4071EA1a
+URL_GRAPHQL=https://fantasy-top.hasura.app/v1/graphql
+URL_REST=https://fantasy.top/api/bids/get-bid-orders
+DATA_FOLDER=/app/data
+GITHUB_PAT=your_github_pat
+```
+
+## Troubleshooting
+
+### Missing Environment Variables
+
+If environment variables are not loaded, the application will notify you with an error message. Ensure that all required variables are set in the `.env` file.
+
+### Docker and Portainer Issues
+
+If you encounter issues with Docker or Portainer, such as environment variables not being loaded correctly:
+
+- Ensure that the `.env` file is correctly configured.
+- Restart the Docker containers or the Portainer stack.
+- Consider defining environment variables directly in the Docker Compose file for persistent configuration.
+
+## Contributing
+
+Contributions are welcome! Please fork this repository and submit a pull request for any feature additions or bug fixes.
+
+## License
+
+This project is licensed under the MIT License.
