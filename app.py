@@ -813,7 +813,7 @@ if 'Description' in tournament_status_df.columns:
         'Pack': 'sum',       # Summing Packs
         'Gold': 'sum'        # Summing Gold
     }).reset_index()
-else
+else:
     st.error("The 'Description' column is missing from the tournament data.")
 
 # Rename the columns for better display
