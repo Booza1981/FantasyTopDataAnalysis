@@ -258,7 +258,7 @@ def check_login_success(driver):
             return False
         
     except TimeoutException:
-        print("The element was not found on the page.")
+        print("Timed Out:The element was not found on the page.")
         return False
     
 

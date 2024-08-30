@@ -805,13 +805,16 @@ with col_main:
 # Load your CSV data into a DataFrame
 tournament_status_df = pd.read_csv(DATA_FOLDER + '/current_tournament_standings.csv')
 
-# Group by the 'Description' (which appears to be the competition name)
-grouped_summary = tournament_status_df.groupby('Description').agg({
-    'Deck No': 'count',  # Counting number of decks
-    'ETH': 'sum',        # Summing ETH
-    'Pack': 'sum',       # Summing Packs
-    'Gold': 'sum'        # Summing Gold
-}).reset_index()
+if 'Description' in tournament_status_df.columns:
+    # Group by the 'Description' (which appears to be the competition name)
+    grouped_summary = tournament_status_df.groupby('Description').agg({
+        'Deck No': 'count',  # Counting number of decks
+        'ETH': 'sum',        # Summing ETH
+        'Pack': 'sum',       # Summing Packs
+        'Gold': 'sum'        # Summing Gold
+    }).reset_index()
+else
+    st.error("The 'Description' column is missing from the tournament data.")
 
 # Rename the columns for better display
 grouped_summary.columns = ['Competition', 'Number of Decks', 'Total ETH', 'Total Packs', 'Total Gold']
