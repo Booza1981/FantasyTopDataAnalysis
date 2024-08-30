@@ -813,16 +813,15 @@ if 'Description' in tournament_status_df.columns:
         'Pack': 'sum',       # Summing Packs
         'Gold': 'sum'        # Summing Gold
     }).reset_index()
+
+    # Rename the columns for better display
+    grouped_summary.columns = ['Competition', 'Number of Decks', 'Total ETH', 'Total Packs', 'Total Gold']
+
+    # Display the summary at the top of the app
+    st.sidebar.subheader("Tournament Summary")
+    st.sidebar.dataframe(grouped_summary)
 else:
     st.error("The 'Description' column is missing from the tournament data.")
-
-# Rename the columns for better display
-grouped_summary.columns = ['Competition', 'Number of Decks', 'Total ETH', 'Total Packs', 'Total Gold']
-
-# Display the summary at the top of the app
-st.sidebar.subheader("Tournament Summary")
-st.sidebar.dataframe(grouped_summary)
-
 
 
 
