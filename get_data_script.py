@@ -663,19 +663,22 @@ def download_basic_hero_stats(token):
                 'hero_handle': hero_data['handle'],
                 'hero_profile_image_url': hero_data['profile_image_url_https'],
                 'hero_volume': hero_data['volume']['aggregate']['sum']['price'] if hero_data['volume']['aggregate']['sum']['price'] is not None else 0,
-                'hero_last_sale_price': hero_data['last_sale'][0]['price'] if hero_data['last_sale'] else None,
-                'hero_floor_price': hero_data['floor'][0]['lowest_price'] if hero_data['floor'] else None
+                # Safely handle the hero_last_sale_price field
+                'hero_last_sale_price': hero_data['last_sale'][0]['price'] if hero_data.get('last_sale') and len(hero_data['last_sale']) > 0 else None,
+                # Safely handle the hero_floor_price field
+                'hero_floor_price': hero_data['floor'][0]['lowest_price'] if hero_data.get('floor') and len(hero_data['floor']) > 0 else None
             }
             hero_list.append(hero_info)
         return hero_list
     
+    # Modified GraphQL query to remove 'is_pending_hero'
     query_get_heros_with_stats = """
     query GET_HEROS_WITH_STATS($offset: Int = 0, $limit: Int = 20, $order_by: [twitter_data_current_order_by!] = {current_rank: asc}, $search: String = "") @cached(ttl: 300) {
       twitter_data_current(
         order_by: $order_by
         offset: $offset
         limit: $limit
-        where: {hero: {_or: [{name: {_ilike: $search}}, {handle: {_ilike: $search}}], is_pending_hero: {_eq: false}}}
+        where: {hero: {_or: [{name: {_ilike: $search}}, {handle: {_ilike: $search}}], status: {_eq: "HERO"}}}
       ) {
         current_rank
         previous_rank
@@ -726,13 +729,23 @@ def download_basic_hero_stats(token):
         variables_get_heros_with_stats['offset'] += variables_get_heros_with_stats['limit']
     
     all_heros_df = pd.DataFrame(all_heros_list)
+    
+    # Convert hero_volume and hero_last_sale_price to ETH where applicable
     if 'hero_volume' in all_heros_df.columns:
-      all_heros_df['hero_volume'] = all_heros_df['hero_volume'].apply(convert_to_eth)
-    all_heros_df['hero_last_sale_price'] = all_heros_df['hero_last_sale_price'].apply(convert_to_eth)
-    all_heros_df.drop(columns=['previous_rank', 'hero_last_sale_price', 'hero_floor_price'], inplace=True)
+        all_heros_df['hero_volume'] = all_heros_df['hero_volume'].apply(convert_to_eth)
+    
+    if 'hero_last_sale_price' in all_heros_df.columns:
+        all_heros_df['hero_last_sale_price'] = all_heros_df['hero_last_sale_price'].apply(convert_to_eth)
+
+    # Drop columns if they exist in the DataFrame
+    all_heros_df.drop(columns=['previous_rank', 'hero_last_sale_price', 'hero_floor_price'], inplace=True, errors='ignore')
+    
+    # Reorder the columns
     columns_order = ['current_rank', 'hero_name', 'hero_handle'] + [col for col in all_heros_df.columns if col not in ['current_rank', 'hero_name', 'hero_handle']]
     all_heros_df = all_heros_df[columns_order]
+    
     return all_heros_df
+
 
 def get_hero_stats(handle_list, token):
     
@@ -1489,16 +1502,16 @@ def main():
     driver, token = login()
     print(token)
     try:
-        # update_star_history(driver, token)
-        # update_tournament_status(PLAYER_ID, token)
-        # update_basic_hero_stats(driver, token)
+        update_star_history(driver, token)
+        update_tournament_status(PLAYER_ID, token)
+        update_basic_hero_stats(driver, token)
         update_portfolio(driver, token) # not working
-        # update_last_trades(driver, token)
-        # update_listings(driver)
-        # update_hero_stats(driver, token)
-        # update_hero_trades(driver, token)
-        # update_hero_supply(driver, token)
-        # update_bids(driver, token)
+        update_last_trades(driver, token)
+        update_listings(driver)
+        update_hero_stats(driver, token)
+        update_hero_trades(driver, token)
+        update_hero_supply(driver, token)
+        update_bids(driver, token)
     finally:
         driver.quit()
 
