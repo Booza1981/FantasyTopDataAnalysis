@@ -494,6 +494,7 @@ def retry_request(func, retries=3, delay=30, *args, **kwargs):
     return None
 
 def download_portfolio(token):
+    # GraphQL query exactly matching the Postman query
     query_get_cards = """
     query GET_CARDS($id: String!, $limit: Int = 100, $offset: Int = 0, $where: i_beta_player_cards_type_bool_exp = {}, $sort_order: String = "") {
       get_player_cards: get_player_cards_new(
@@ -544,7 +545,7 @@ def download_portfolio(token):
             }
           }
           floor_price
-          bids(limit: 1) {
+          bids(limit: 1, order_by: {price: desc}) {  # Ensure the bids have this sorting
             id
             price
           }
@@ -594,6 +595,14 @@ def download_portfolio(token):
                     'picture_url': card_data['picture_url'],
                     'token_id': card_data['token_id'],
                     'rarity': card_data['rarity'],
+                    'floor_price': card_data.get('floor_price'),
+                    'bids': [
+                        {
+                            'bid_id': bid['id'],
+                            'price': bid['price']
+                        } for bid in card_data.get('bids', [])
+                    ],
+                    # Hero fields
                     'hero_id': hero_data['id'],
                     'hero_name': hero_data['name'],
                     'hero_handle': hero_data['handle'],
@@ -609,13 +618,6 @@ def download_portfolio(token):
                             'hero_rarity_index': trade['hero_rarity_index'],
                             'price': trade['price']
                         } for trade in hero_data['trades']
-                    ],
-                    'floor_price': card_data.get('floor_price'),
-                    'bids': [
-                        {
-                            'bid_id': bid['id'],
-                            'price': bid['price']
-                        } for bid in card_data.get('bids', [])
                     ]
                 }
                 card_list.append(card_info)
@@ -630,8 +632,13 @@ def download_portfolio(token):
         all_cards_list.extend(portfolio_list)
         variables_get_cards['offset'] += variables_get_cards['limit']
     
+    # Convert to DataFrame and ensure it contains all the needed columns
     portfolio_df = pd.DataFrame(all_cards_list)
-    portfolio_df.drop(columns=['owner', 'card_id', 'card_owner'], inplace=True)
+    
+    # Drop columns conditionally if they exist in the DataFrame
+    columns_to_drop = ['owner', 'card_id', 'card_owner']
+    portfolio_df = portfolio_df.drop(columns=[col for col in columns_to_drop if col in portfolio_df.columns], inplace=False)
+    
     return portfolio_df
 
 def download_basic_hero_stats(token):
@@ -1482,16 +1489,16 @@ def main():
     driver, token = login()
     print(token)
     try:
-        update_star_history(driver, token)
-        update_tournament_status(PLAYER_ID, token)
-        update_basic_hero_stats(driver, token)
+        # update_star_history(driver, token)
+        # update_tournament_status(PLAYER_ID, token)
+        # update_basic_hero_stats(driver, token)
         update_portfolio(driver, token) # not working
-        update_last_trades(driver, token)
-        update_listings(driver)
-        update_hero_stats(driver, token)
-        update_hero_trades(driver, token)
-        update_hero_supply(driver, token)
-        update_bids(driver, token)
+        # update_last_trades(driver, token)
+        # update_listings(driver)
+        # update_hero_stats(driver, token)
+        # update_hero_trades(driver, token)
+        # update_hero_supply(driver, token)
+        # update_bids(driver, token)
     finally:
         driver.quit()
 
