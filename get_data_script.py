@@ -495,7 +495,7 @@ def download_listings(driver):
     return final_df
 
 def download_portfolio(token):
-    # GraphQL query exactly matching the Postman query
+    # Updated GraphQL query to match the Postman query
     query_get_cards = """
     query GET_CARDS($id: String!, $limit: Int = 100, $offset: Int = 0, $where: i_beta_player_cards_type_bool_exp = {}, $sort_order: String = "") {
       get_player_cards: get_player_cards_new(
@@ -536,17 +536,9 @@ def download_portfolio(token):
               views
               current_rank
             }
-            trades(
-              order_by: {hero_rarity_index: asc, created_at: desc}
-              distinct_on: hero_rarity_index
-            ) {
-              id
-              hero_rarity_index
-              price
-            }
           }
           floor_price
-          bids(limit: 1, order_by: {price: desc}) {  # Ensure the bids have this sorting
+          bids(limit: 1, order_by: {price: desc}) {
             id
             price
           }
@@ -557,7 +549,7 @@ def download_portfolio(token):
     
     variables_get_cards = {
         "id": PLAYER_ID,
-        "limit": 50,
+        "limit": 50,  # Maintain your limit of 50
         "offset": 0,
         "where": {
             "card": {
@@ -613,12 +605,11 @@ def download_portfolio(token):
                     'hero_fantasy_score': hero_data['current_score']['fantasy_score'],
                     'hero_views': hero_data['current_score']['views'],
                     'hero_current_rank': hero_data['current_score']['current_rank'],
-                    'hero_trades': [
+                    # Flag fields as per Postman request
+                    'hero_flags': [
                         {
-                            'trade_id': trade['id'],
-                            'hero_rarity_index': trade['hero_rarity_index'],
-                            'price': trade['price']
-                        } for trade in hero_data['trades']
+                            'flag_id': flag['flag_id']
+                        } for flag in hero_data.get('flags', [])
                     ]
                 }
                 card_list.append(card_info)
@@ -641,6 +632,7 @@ def download_portfolio(token):
     portfolio_df = portfolio_df.drop(columns=[col for col in columns_to_drop if col in portfolio_df.columns], inplace=False)
     
     return portfolio_df
+
 
 def download_basic_hero_stats(token):
     def extract_heros_data(response_data):
@@ -1687,17 +1679,17 @@ def update_tournament_status(driver, token):
 def main():
     driver, token = login()
     try:
-        update_star_history(driver, token)
-        update_tournament_status(PLAYER_ID, token)
-        update_basic_hero_stats(driver, token)
+        # update_star_history(driver, token)
+        # update_tournament_status(PLAYER_ID, token)
+        # update_basic_hero_stats(driver, token)
         update_portfolio(driver, token) 
-        # update_last_trades(driver, token)
-        update_listings(driver)
-        update_hero_stats(driver, token)
-        update_hero_trades(driver, token)
-        update_hero_supply(driver, token)
-        update_bids(driver, token)
-        update_tournament_history(driver, token)
+        # # update_last_trades(driver, token)
+        # update_listings(driver)
+        # update_hero_stats(driver, token)
+        # update_hero_trades(driver, token)
+        # update_hero_supply(driver, token)
+        # update_bids(driver, token)
+        # update_tournament_history(driver, token)
     finally:
         driver.quit()
 
