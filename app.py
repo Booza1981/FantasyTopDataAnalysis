@@ -4,7 +4,8 @@ import plotly.graph_objects as go
 from get_data_script import (
     login, update_basic_hero_stats, update_portfolio, update_last_trades, 
     update_listings, update_hero_stats, update_hero_supply, update_bids, 
-    update_hero_trades, update_tournament_status, update_star_history, DATA_FOLDER
+    update_hero_trades, update_tournament_status, update_star_history, 
+    update_tournament_history, DATA_FOLDER
 )
 from data_compiler import compile_data
 import glob
@@ -164,11 +165,11 @@ def run_update_and_compile(selected_updates):
                 st.sidebar.info(st.session_state.update_status)
             st.session_state.driver, st.session_state.token = login()
 
-        if "Update Tournament Scores" in selected_updates:
-            st.session_state.update_status = "Updating Tournament Scores..."
+        if "Update Tournament Hero History" in selected_updates:
+            st.session_state.update_status = "Updating Hero Tournament Histories..."
             with st.sidebar:
                 st.sidebar.info(st.session_state.update_status)
-            update_tournament_status(st.session_state.driver, st.session_state.token)
+            update_tournament_history(st.session_state.driver, st.session_state.token)
 
         if "Update Basic Hero Stats" in selected_updates:
             st.session_state.update_status = "Updating Basic Hero Stats..."
@@ -834,6 +835,7 @@ select_all = st.sidebar.checkbox("Select All")
 # Checkboxes for individual updates
 update_options = [
     "Update Tournament Scores",
+    "Update Tournament Hero History"
     "Update Basic Hero Stats",
     "Update Portfolio",
     "Update Last Trades",
