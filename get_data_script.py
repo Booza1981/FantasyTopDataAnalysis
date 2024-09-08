@@ -1416,7 +1416,6 @@ def get_tournament_stats(tournament_id, token):
       retries = 0
       while retries < max_retries:
           response = send_graphql_request(query, variables, token=token)
-          print("Raw Response:", response)  # Add this line
           if 'errors' in response:
               error_code = response['errors'][0]['extensions']['code']
               if error_code == 'rate-limit-exceeded':
@@ -1674,7 +1673,7 @@ def update_star_history(driver, token):
     star_history_df = print_runtime(get_hero_stars, token)
     save_df_as_csv(star_history_df, 'star_history')
 
-def update_tournament_history(token):
+def update_tournament_history(driver, token):
     print_runtime(update_tournaments_stats, token)
 
 def update_tournament_status(driver, token):
@@ -1687,17 +1686,17 @@ def update_tournament_status(driver, token):
 def main():
     driver, token = login()
     try:
-        # update_star_history(driver, token)
-        # update_tournament_status(PLAYER_ID, token)
-        # update_basic_hero_stats(driver, token)
-        # update_portfolio(driver, token) 
+        update_star_history(driver, token)
+        update_tournament_status(PLAYER_ID, token)
+        update_basic_hero_stats(driver, token)
+        update_portfolio(driver, token) 
         # update_last_trades(driver, token)
-        # update_listings(driver)
-        # update_hero_stats(driver, token)
-        # update_hero_trades(driver, token)
-        # update_hero_supply(driver, token)
-        # update_bids(driver, token)
-        update_tournament_history(token)
+        update_listings(driver)
+        update_hero_stats(driver, token)
+        update_hero_trades(driver, token)
+        update_hero_supply(driver, token)
+        update_bids(driver, token)
+        update_tournament_history(driver, token)
     finally:
         driver.quit()
 

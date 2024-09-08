@@ -3,7 +3,16 @@ import re
 import pandas as pd
 from datetime import datetime
 import numpy as np
-from get_data_script import DATA_FOLDER
+from dotenv import load_dotenv
+
+# Load the .env file
+load_dotenv()
+
+# Clear the environment variables before loading the .env file
+os.environ.clear()
+
+# Retrieve DATA_FOLDER from environment variables
+DATA_FOLDER = os.getenv("DATA_FOLDER")
 
 
 TOURNAMENT_COLUMNS = [
