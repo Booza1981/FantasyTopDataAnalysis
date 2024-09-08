@@ -7,6 +7,7 @@ import glob
 import sys
 import requests
 import pandas as pd
+import numpy as np
 import pickle
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -92,7 +93,6 @@ def load_data(filepath):
      print(f"File {filepath} not found. Proceeding without loading data.")
      return None
  
-
 def save_browser_data(driver):
     session_storage = driver.execute_script("return window.sessionStorage;")
     save_data(driver, SESSION_FILE, session_storage)
@@ -110,8 +110,6 @@ def save_browser_data(driver):
 
     driver.get("https://www.fantasy.top/home")
     
-
-
 def load_browser_data(driver):
     session_storage = load_data(SESSION_FILE)
     if session_storage:
@@ -133,7 +131,6 @@ def load_browser_data(driver):
             driver.add_cookie(cookie)
         driver.get("https://www.fantasy.top/home")
 
-
 def clear_browser_data(driver):
     # Clear cookies
     driver.delete_all_cookies()
@@ -146,7 +143,6 @@ def clear_browser_data(driver):
     # Clear local storage
     driver.execute_script("window.localStorage.clear();")
     print("Local storage cleared.")
-
 
 def convert_to_eth(value):
     try:
@@ -166,7 +162,6 @@ def save_df_as_csv(df, filename, folder=DATA_FOLDER):
     df.to_csv(full_path, index=False)
     print(f"DataFrame saved as {full_path}")
 
-
 def print_runtime(func, *args, **kwargs):
     print(f'Calling {func.__name__}')
     start_time = time.time()
@@ -176,7 +171,9 @@ def print_runtime(func, *args, **kwargs):
     print(f'{func.__name__} took {runtime:.4f} seconds to execute')
     return result
 
+############################################################################
 # WebDriver and Login
+############################################################################
 
 def get_random_user_agent():
     ua = UserAgent(platforms='pc')
@@ -198,7 +195,6 @@ def setup_driver():
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     return driver
-
 
 def login_to_fantasy(driver, username, password):
     driver.get("https://www.fantasy.top/home")
@@ -237,7 +233,6 @@ def login_to_fantasy(driver, username, password):
         except TimeoutException:
             print("Twitter login flow elements not found. Login might have failed.")
 
-
 def check_login_success(driver):
     try:
         # Wait for the element to be present
@@ -261,7 +256,6 @@ def check_login_success(driver):
         print("Timed Out:The element was not found on the page.")
         return False
     
-
 def close_popup_if_appears(driver):
     try:
         close_popup_button = WebDriverWait(driver, 10).until(
@@ -312,7 +306,86 @@ def login():
 
     return driver, token
 
+############################################################################
+# Data Download Supporting Functions
+############################################################################
+
+def send_graphql_request(query=None, variables=None, token=None, request_type='graphql', params=None, cookies=None):
+    if request_type == 'graphql':
+        payload = json.dumps({
+            "query": query,
+            "variables": variables
+        })
+        headers = {
+                'authorization': f'Bearer {token}',
+                'content-type': 'application/json',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+                'accept': '*/*',
+                'origin': 'https://fantasy.top',
+                'sec-fetch-site': 'cross-site',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-dest': 'empty',
+                'referer': 'https://fantasy.top/',
+                'accept-encoding': 'gzip, deflate, br, zstd',
+                'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+                'sec-ch-ua': '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"'
+            }
+
+        response = requests.post(URL_GRAPHQL, headers=headers, data=payload, cookies=cookies)
+        response.raise_for_status()
+        return response.json()
+    
+    elif request_type == 'rest':
+        headers = {
+            'accept': '*/*',
+            'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+            'authorization': f'Bearer {token}',
+            'priority': 'u=1, i',
+            'referer': 'https://fantasy.top/marketplace',
+            'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        }
+        response = requests.get(URL_REST, params=params, headers=headers, cookies=cookies)
+        response.raise_for_status()
+        return response.json()
+
+def retry_request(func, retries=3, delay=30, *args, **kwargs):
+    """
+    Retry a function call with exponential backoff.
+
+    Parameters:
+    - func: The function to retry.
+    - retries: Maximum number of retries.
+    - delay: Initial delay between retries.
+    - *args, **kwargs: Arguments to pass to the function.
+
+    Returns:
+    - The result of the function call if successful.
+    - None if all retries are exhausted.
+    """
+    for attempt in range(retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            sys.stdout.write(f"\rError: {e}, attempt {attempt + 1}/{retries}")
+            sys.stdout.flush()
+            if attempt < retries - 1:
+                time.sleep(delay * (2 ** attempt))  # Exponential backoff
+            else:
+                sys.stdout.write(f"\rFailed after {retries} attempts\n")
+                sys.stdout.flush()
+    return None
+
+############################################################################
 # Data Download Functions
+############################################################################
 
 def download_listings(driver):
     actions = ActionChains(driver)
@@ -419,79 +492,6 @@ def download_listings(driver):
                            'current_rank', 'previous_rank', 'views', 'fantasy_score'], inplace=True)
     final_df = final_df.rename(columns={'heroId': 'hero_id'})
     return final_df
-
-def send_graphql_request(query=None, variables=None, token=None, request_type='graphql', params=None, cookies=None):
-    if request_type == 'graphql':
-        payload = json.dumps({
-            "query": query,
-            "variables": variables
-        })
-        headers = {
-                'authorization': f'Bearer {token}',
-                'content-type': 'application/json',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
-                'accept': '*/*',
-                'origin': 'https://fantasy.top',
-                'sec-fetch-site': 'cross-site',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-dest': 'empty',
-                'referer': 'https://fantasy.top/',
-                'accept-encoding': 'gzip, deflate, br, zstd',
-                'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-                'sec-ch-ua': '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"'
-            }
-
-        response = requests.post(URL_GRAPHQL, headers=headers, data=payload, cookies=cookies)
-        response.raise_for_status()
-        return response.json()
-    
-    elif request_type == 'rest':
-        headers = {
-            'accept': '*/*',
-            'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-            'authorization': f'Bearer {token}',
-            'priority': 'u=1, i',
-            'referer': 'https://fantasy.top/marketplace',
-            'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        }
-        response = requests.get(URL_REST, params=params, headers=headers, cookies=cookies)
-        response.raise_for_status()
-        return response.json()
-
-def retry_request(func, retries=3, delay=30, *args, **kwargs):
-    """
-    Retry a function call with exponential backoff.
-
-    Parameters:
-    - func: The function to retry.
-    - retries: Maximum number of retries.
-    - delay: Initial delay between retries.
-    - *args, **kwargs: Arguments to pass to the function.
-
-    Returns:
-    - The result of the function call if successful.
-    - None if all retries are exhausted.
-    """
-    for attempt in range(retries):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            sys.stdout.write(f"\rError: {e}, attempt {attempt + 1}/{retries}")
-            sys.stdout.flush()
-            if attempt < retries - 1:
-                time.sleep(delay * (2 ** attempt))  # Exponential backoff
-            else:
-                sys.stdout.write(f"\rFailed after {retries} attempts\n")
-                sys.stdout.flush()
-    return None
 
 def download_portfolio(token):
     # GraphQL query exactly matching the Postman query
@@ -746,7 +746,6 @@ def download_basic_hero_stats(token):
     
     return all_heros_df
 
-
 def get_hero_stats(handle_list, token):
     
     '''
@@ -993,7 +992,6 @@ def get_hero_supply(hero_id_list, token):
     all_hero_supplies_df = all_hero_supplies_df.rename(columns={'heroId': 'hero_id'})
     return all_hero_supplies_df
 
-
 def get_bids(hero_id_list, token, cookies):
     def get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay=2, retries=3):
         hero_bids = {'hero_id': hero_id}
@@ -1042,7 +1040,6 @@ def get_bids(hero_id_list, token, cookies):
     
     highest_bids_df = collect_highest_bids(hero_id_list, token, cookies)
     return highest_bids_df
-
 
 def download_hero_trades(hero_ids, token):
     all_trades_data = []
@@ -1194,6 +1191,301 @@ def get_hero_stars(token):
     
     return fetch_star_history_data(token)
 
+def get_all_tournaments(url, gte, lte, token, player_id, filter_and_cleanse=True):
+    ''' 
+    Function to get all tournaments within a given time range and process the data.
+    url: URL for the GraphQL endpoint
+    gte: Start date in ISO format (e.g., '2022-01-01T00:00:00Z') 
+    lte: End date in ISO format (e.g., '2022-01-31T23:59:59Z')
+    player_id: Player ID for the tournaments (can be left as blank string if not needed)
+    token: Authorization token for the GraphQL endpoint 
+    filter_and_cleanse: Boolean flag to filter and cleanse the data to a unique list of tournaments that store the hero data(default is True)
+    '''
+    # Define the query
+    query_get_tournaments_by_time = """
+    query GET_TOURNAMENTS_BY_TIME($gte: timestamptz!, $lte: timestamptz!, $player_id: String!) {
+      tournaments_tournament(
+        where: {start_date: {_gte: $gte, _lte: $lte}}
+        order_by: {start_date: desc}
+      ) {
+        id
+        name
+        description
+        start_date
+        end_date
+        is_main
+        league
+        tournament_number
+        player_history_count: players_history_aggregate(
+          where: {player_id: {_eq: $player_id}}
+        ) {
+          aggregate {
+            count
+          }
+        }
+        total_players_count: players_history_aggregate {
+          aggregate {
+            count
+          }
+        }
+        rewards {
+          type
+          distribution(path: "[0].reward")
+          total_supply
+        }
+      }
+    }
+    """
+
+    def parse_datetime(date_str):
+        try:
+            return datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except ValueError:
+            return datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S%z')
+
+    def process_get_tournaments_by_time(response):
+        if 'errors' in response:
+            print('Errors:', response['errors'])
+            return pd.DataFrame()
+
+        tournaments = response.get('data', {}).get('tournaments_tournament', [])
+
+        tournaments_data = []
+        for tournament in tournaments:
+            rewards_data = tournament.get('rewards', [{}])[0]
+            tournaments_data.append({
+                'id': tournament['id'],
+                'name': tournament['name'],
+                'description': tournament['description'],
+                'start_date': tournament['start_date'],
+                'end_date': tournament['end_date'],
+                'start_day': parse_datetime(tournament['start_date']).strftime('%A'), 
+                'end_day': parse_datetime(tournament['end_date']).strftime('%A'),
+                'is_main': tournament['is_main'],
+                'league': tournament['league'],
+                'tournament_number': tournament['tournament_number'],
+                'player_history_count': tournament['player_history_count']['aggregate']['count'],
+                'total_players_count': tournament['total_players_count']['aggregate']['count'],
+                'reward_type': rewards_data.get('type'),
+                'reward_distribution': rewards_data.get('distribution'),
+                'reward_total_supply': rewards_data.get('total_supply')
+            })
+
+        return pd.DataFrame(tournaments_data)
+
+    def cleanse_name(name):
+        name = re.sub(r'[^\w\s]', '', name)  # Remove all non-alphanumeric characters except whitespace
+        name = re.sub(r'\s+', ' ', name)  # Replace multiple spaces with a single space
+        return name.strip()  # Remove leading and trailing spaces
+
+    def fix_name(row):
+        # Check if 'main' is in either 'name' or 'description', and 'tournament_number' is not NaN
+        if ('main' in row['name'].lower() or 'main' in row['description'].lower()) and not pd.isna(row['tournament_number']):
+            return 'Main ' + str(row['tournament_number']).split('.')[0]
+        else:
+            return row['name']
+
+    # Function to get tournaments and process them
+    def fetch_and_process_tournaments():
+      # Define query variables
+      variables = {
+          "gte": gte,
+          "lte": lte,
+          "player_id": player_id
+      }
+      
+      # Send request and get the response
+      response = send_graphql_request(query_get_tournaments_by_time, variables, token=token)
+      
+      # Process the response into a DataFrame
+      tournaments_df = process_get_tournaments_by_time(response)
+      
+      # If filter_and_cleanse is False, return the raw DataFrame
+      if not filter_and_cleanse:
+          return tournaments_df
+      
+      # Filter and cleanse the DataFrame to get a list of unique tournaments that contain the hero tournament data. Where there are multiple leagues in the same tournament the league with the lowest number contains the hero tournament data, except for Main 2 and Main 3 where the highest league number contains the hero tournament data.
+      # Custom sort logic to handle Main 2 and Main 3 differently
+      def custom_sort_key(row):
+          if row['is_main'] and row['tournament_number'] == 2:
+              return -row['league']  # Sort in descending order for Main 2 (highest league number first)
+          elif row['is_main'] and row['tournament_number'] == 3:
+              return -row['league']  # Sort in descending order for Main 3 (highest league number first)
+          else:
+              return row['league']  # Sort in ascending order for other tournaments
+      
+      # Apply the custom sort logic and create a new column for sorting
+      tournaments_df['custom_sort_key'] = tournaments_df.apply(custom_sort_key, axis=1)
+      
+      # Sort the DataFrame by 'start_date', 'end_date', and the custom sort key
+      tournaments_df_sorted = tournaments_df.sort_values(by=['start_date', 'end_date', 'custom_sort_key'], ascending=[True, True, True])
+      
+      # Drop duplicates based on 'start_date' and 'end_date', keeping the desired league
+      tournaments_df_filtered = tournaments_df_sorted.drop_duplicates(subset=['start_date', 'end_date'], keep='first')
+      
+      # Cleanse and simplify tournament names
+      tournaments_df_filtered['name'] = tournaments_df_filtered['name'].apply(cleanse_name)
+      tournaments_df_filtered['simplified_name'] = tournaments_df_filtered.apply(fix_name, axis=1)
+      
+      # Drop the temporary 'custom_sort_key' column
+      tournaments_df_filtered = tournaments_df_filtered.drop(columns=['custom_sort_key'])
+      
+      return tournaments_df_filtered
+
+    # Fetch and process tournaments
+    return fetch_and_process_tournaments()
+
+# Function to get tournament stats for a specific tournament_id
+def get_tournament_stats(tournament_id, token):
+    query_get_heros_with_stats_tournament = """
+    query GET_HEROS_WITH_STATS_TOURNAMENT($tournament_id: String = "", $offset: Int = 0, $limit: Int = 20, $order_by: [twitter_data_tournament_history_order_by!] = {current_rank: asc}, $search: String = "") {
+      twitter_data_current: twitter_data_tournament_history(
+        where: {id: {_eq: $tournament_id}, hero: {_or: [{name: {_ilike: $search}}, {handle: {_ilike: $search}}]}}
+        order_by: $order_by
+        offset: $offset
+        limit: $limit
+      ) {
+        current_rank
+        previous_rank
+        views
+        tweet_count
+        fantasy_score
+        reach
+        avg_views
+        hero {
+          followers_count
+          name
+          handle
+          profile_image_url_https
+          volume: trades_aggregate {
+            aggregate {
+              sum {
+                price
+              }
+            }
+          }
+          last_sale: trades(limit: 1) {
+            price
+          }
+          floor: unique_sell_orders(order_by: {lowest_price: asc_nulls_last}, limit: 1) {
+            lowest_price
+          }
+        }
+      }
+    }
+    """
+    
+    def process_get_heros_with_stats_tournament(response):
+        if 'errors' in response:
+            print('Errors:', response['errors'])
+            return pd.DataFrame()
+        
+        heros = response.get('data', {}).get('twitter_data_current', [])
+        
+        heros_data = []
+        for hero_entry in heros:
+            hero = hero_entry['hero']
+            heros_data.append({
+                'current_rank': hero_entry['current_rank'],
+                'previous_rank': hero_entry['previous_rank'],
+                'views': hero_entry['views'],
+                'tweet_count': hero_entry['tweet_count'],
+                'fantasy_score': hero_entry['fantasy_score'],
+                'reach': hero_entry['reach'],
+                'avg_views': hero_entry['avg_views'],
+                'hero_followers_count': hero['followers_count'],
+                'hero_name': hero['name'],
+                'hero_handle': hero['handle'],
+                'hero_profile_image_url': hero['profile_image_url_https'],
+                'hero_volume': convert_to_eth(hero['volume']['aggregate']['sum']['price']),
+                'hero_last_sale_price': convert_to_eth(hero['last_sale'][0]['price']),
+                'hero_floor_price': convert_to_eth(hero['floor'][0]['lowest_price'])
+            })
+        
+        return pd.DataFrame(heros_data)
+    
+    def get_heros_with_stats_tournament(url, query, tournament_id, offset, limit, order_by, search, token, max_retries=5, delay=2):
+      variables = {
+          "tournament_id": tournament_id,
+          "offset": offset,
+          "order_by": order_by,
+          "limit": limit,
+          "search": search
+      }
+
+      retries = 0
+      while retries < max_retries:
+          response = send_graphql_request(query, variables, token=token)
+          print("Raw Response:", response)  # Add this line
+          if 'errors' in response:
+              error_code = response['errors'][0]['extensions']['code']
+              if error_code == 'rate-limit-exceeded':
+                  print(f"Rate limit exceeded, sleeping for {delay} seconds. Attempt {retries + 1}/{max_retries}")
+                  time.sleep(delay)
+                  delay *= 2  # Exponential backoff
+                  retries += 1
+              else:
+                  print(f"Query: {query}")
+                  print(f"Variables: {variables}")
+                  raise Exception(f"Error fetching data: {response['errors']}")
+          else:
+              return process_get_heros_with_stats_tournament(response)
+      raise Exception("Max retries exceeded")
+
+    
+    # Get hero stats for the specified tournament
+    offset = 0
+    order_by = {"fantasy_score": "desc"}
+    limit = 200
+    search = "%%"
+
+    
+    heros_with_stats_tournament_df = get_heros_with_stats_tournament(URL_GRAPHQL, query_get_heros_with_stats_tournament, tournament_id, offset, limit, order_by, search, token)
+    
+    return heros_with_stats_tournament_df
+
+# Function to get stats for all tournaments in the DataFrame, with an option to check for existing files. If check_existing is false, it will fetch data for all tournaments.
+def update_tournaments_stats(token, check_existing=True):
+
+    gte = "1970-01-01T00:00:00.000Z"
+    lte = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    
+    # Get filtered and cleansed results
+    tournaments_df = get_all_tournaments(URL_GRAPHQL, gte, lte, token, player_id= "")
+
+    for idx, row in tournaments_df.iterrows():
+        tournament_id = row['id']
+        simplified_name = row['simplified_name'].replace(' ', '_')
+        tournament_start = row['start_date'].split('T')[0]  # Assuming ISO format (YYYY-MM-DDTHH:MM:SS)
+        tournament_end = row['end_date'].split('T')[0]
+
+        print(f"Processing tournament: {simplified_name} (ID: {tournament_id})")
+
+        try:
+            # Generate the directory and file path
+            tournament_results_folder = os.path.join(DATA_FOLDER, 'tournament_results')
+            os.makedirs(tournament_results_folder, exist_ok=True)
+            csv_filename = f"{simplified_name}_{tournament_start}_{tournament_end}.csv"
+            file_path = os.path.join(tournament_results_folder, csv_filename)
+
+            # Check if the file already exists, if enabled
+            if check_existing and os.path.isfile(file_path):
+                print(f"File {csv_filename} already exists. Skipping API call.")
+                continue  # Skip fetching data if the file already exists
+
+            # Fetch the tournament stats if the file doesn't exist
+            tournament_stats_df = get_tournament_stats(tournament_id, token)
+
+            if len(tournament_stats_df) > 0:
+                # Save to CSV
+                tournament_stats_df.to_csv(file_path, index=False)
+                print(f"DataFrame for {simplified_name} saved to {file_path} with {len(tournament_stats_df)} rows")
+            else:
+                print(f"No data for tournament {simplified_name} (ID: {tournament_id})")
+
+        except Exception as e:
+            print(f"Failed to fetch data for tournament {tournament_id} with error: {str(e)}")
+
 def get_tournament_status(player_id, token):
     def get_registered_tournament_data(player_id, token):
         query_get_registered_tournament_ids = """
@@ -1312,6 +1604,12 @@ def get_tournament_status(player_id, token):
     current_tournaments_standings = create_trournament_rank_rewards_table(token)
 
     return current_tournaments_standings
+
+
+############################################################################
+# Functions to provide seed data to the main functions
+############################################################################
+
 
 def get_latest_file(directory, prefix):
     files = glob.glob(os.path.join(directory, f'{prefix}*.csv'))
@@ -1330,124 +1628,10 @@ def get_hero_data_list(target_data):
         basic_hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'star_history'))
         return basic_hero_stats_df['handle'].to_list()
     
-def get_tournament_status(player_id, token):
-    def get_registered_tournament_data(player_id, token):
-        query_get_registered_tournament_ids = """
-        query GET_REGISTERED_TOURNAMENT_IDS($player_id: String!) {
-            tournaments_current_players(
-            where: {player_id: {_eq: $player_id}}
-            distinct_on: tournament_id
-            ) {
-            tournament_id
-            tournament {
-                id
-                name
-                description
-                start_date
-                end_date
-                is_main
-                league
-                is_visible
-                tournament_number
-                reward_image
-                rewards {
-                type
-                distribution(path: "[0].reward")
-                total_supply
-                total_distribution: distribution
-                }
-                current_players_aggregate(where: {is_registered: {_eq: true}}) {
-                aggregate {
-                    count
-                }
-                }
-                players_history_aggregate {
-                aggregate {
-                    count
-                }
-                }
-                flags
-                players_history(where: {player_id: {_eq: $player_id}}) {
-                id
-                rank
-                rewards_details
-                score
-                }
-                current_players(where: {player_id: {_eq: $player_id}}) {
-                is_registered
-                rank
-                score
-                }
-            }
-            }
-        }
-        """
 
-        variables = {
-            "player_id": player_id
-        }
-
-        response = send_graphql_request(query=query_get_registered_tournament_ids, variables=variables, token=token)
-        return response
-
-    def extract_registered_tournament_data(response):
-        tournaments = response.get('data', {}).get('tournaments_current_players', [])
-        data = []
-        
-        for tournament_entry in tournaments:
-            tournament = tournament_entry['tournament']
-            description = tournament['description']
-            
-            for player in tournament['current_players']:
-                row = {
-                    'Description': description,
-                    'Deck No': len(data) + 1,  # Assuming Deck No is just a sequential index
-                    'Rank': player['rank']
-                }
-                
-                # Initialize rewards
-                row['ETH'] = 0
-                row['Pack'] = 0
-                row['Gold'] = 0
-                
-                # Check rewards for each type
-                for reward in tournament['rewards']:
-                    total_distribution = reward['total_distribution']
-                    
-                    # Handle total_distribution being a list or a dictionary
-                    if isinstance(total_distribution, list):
-                        for dist in total_distribution:
-                            if dist['start'] <= player['rank'] <= dist['end']:
-                                if reward['type'] == 'ETH':
-                                    row['ETH'] = dist['reward']
-                                elif reward['type'] == 'PACK':
-                                    row['Pack'] = dist['reward']
-                                elif reward['type'] == 'GOLD':
-                                    row['Gold'] = dist['reward']
-                    elif isinstance(total_distribution, dict):
-                        # If it's a dictionary, handle it accordingly
-                        max_value = total_distribution.get('max')
-                        min_value = total_distribution.get('min')
-                        # You can add logic here to handle this case if applicable
-                        # For now, let's skip this as it's not clear how to handle it
-                        continue
-                
-                data.append(row)
-        
-        return pd.DataFrame(data)
-
-    def create_trournament_rank_rewards_table(token):
-        response = get_registered_tournament_data(player_id, token)
-        tournament_standings = extract_registered_tournament_data(response)
-        
-        # Convert the tournament data to a DataFrame (if necessary) and save it as a CSV
-        
-        return tournament_standings
-        #  save_df_as_csv(tournaments_df, 'registered_tournaments')
-
-    current_tournaments_standings = create_trournament_rank_rewards_table(token)
-
-    return current_tournaments_standings
+############################################################################
+# Functions for saving data to CSV
+############################################################################
 
 def update_basic_hero_stats(driver, token):
     basic_hero_stats_df = print_runtime(download_basic_hero_stats, token)
@@ -1490,6 +1674,8 @@ def update_star_history(driver, token):
     star_history_df = print_runtime(get_hero_stars, token)
     save_df_as_csv(star_history_df, 'star_history')
 
+def update_tournament_history(token):
+    print_runtime(update_tournaments_stats, token)
 
 def update_tournament_status(driver, token):
     tournament_standings = print_runtime(get_tournament_status, PLAYER_ID, token)
@@ -1500,18 +1686,18 @@ def update_tournament_status(driver, token):
 
 def main():
     driver, token = login()
-    print(token)
     try:
-        update_star_history(driver, token)
-        update_tournament_status(PLAYER_ID, token)
-        update_basic_hero_stats(driver, token)
-        update_portfolio(driver, token) # not working
-        update_last_trades(driver, token)
-        update_listings(driver)
-        update_hero_stats(driver, token)
-        update_hero_trades(driver, token)
-        update_hero_supply(driver, token)
-        update_bids(driver, token)
+        # update_star_history(driver, token)
+        # update_tournament_status(PLAYER_ID, token)
+        # update_basic_hero_stats(driver, token)
+        # update_portfolio(driver, token) 
+        # update_last_trades(driver, token)
+        # update_listings(driver)
+        # update_hero_stats(driver, token)
+        # update_hero_trades(driver, token)
+        # update_hero_supply(driver, token)
+        # update_bids(driver, token)
+        update_tournament_history(token)
     finally:
         driver.quit()
 
