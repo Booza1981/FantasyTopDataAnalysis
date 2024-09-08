@@ -835,7 +835,7 @@ select_all = st.sidebar.checkbox("Select All")
 # Checkboxes for individual updates
 update_options = [
     "Update Tournament Scores",
-    "Update Tournament Hero History"
+    "Update Tournament Hero History",
     "Update Basic Hero Stats",
     "Update Portfolio",
     # "Update Last Trades",
