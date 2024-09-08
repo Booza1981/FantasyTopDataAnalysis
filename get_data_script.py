@@ -34,8 +34,8 @@ PLAYER_ID = os.getenv("PLAYER_ID")
 URL_GRAPHQL = os.getenv("URL_GRAPHQL")
 URL_REST = os.getenv("URL_REST")
 DATA_FOLDER = os.getenv("DATA_FOLDER")
-DATA_FOLDER = os.path.expanduser(DATA_FOLDER)
 
+print(DATA_FOLDER)
 
 # Required environment variables
 required_env_vars = [
@@ -68,6 +68,7 @@ else:
 
 # Create the directory if it doesn't exist
 if not os.path.exists(DATA_FOLDER):
+    print (f"Creating directory: {DATA_FOLDER}")
     os.makedirs(DATA_FOLDER)
 
 COOKIES_FILE = 'cookies.pkl'
