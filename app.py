@@ -838,7 +838,7 @@ update_options = [
     "Update Tournament Hero History"
     "Update Basic Hero Stats",
     "Update Portfolio",
-    "Update Last Trades",
+    # "Update Last Trades",
     "Update Listings",
     "Update Hero Stats",
     "Update Hero Trades",
