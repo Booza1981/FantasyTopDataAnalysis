@@ -155,6 +155,12 @@ def convert_to_eth(value):
         return None
 
 def save_df_as_csv(df, filename, folder=DATA_FOLDER):
+    # Check if DataFrame is empty
+    if df.empty:
+        print(f"DataFrame {df} is empty. No {filename} file will be saved.")
+        return
+    
+    # Proceed with saving the file if not empty
     timestamp = datetime.now().strftime('%y%m%d_%H%M')
     filename_with_timestamp = f"{filename}_{timestamp}.csv"
     if not os.path.exists(folder):
@@ -162,6 +168,7 @@ def save_df_as_csv(df, filename, folder=DATA_FOLDER):
     full_path = os.path.join(folder, filename_with_timestamp)
     df.to_csv(full_path, index=False)
     print(f"DataFrame saved as {full_path}")
+
 
 def print_runtime(func, *args, **kwargs):
     print(f'Calling {func.__name__}')
@@ -571,6 +578,8 @@ def download_portfolio(token):
             return []
         else:
             cards = cards_response.get('data', {}).get('get_player_cards', [])
+            cards = cards_response.get('data', {}).get('get_player_cards', [])
+            print(f"Number of cards fetched: {len(cards)}")
             card_list = []
             for card_entry in cards:
                 card_data = card_entry['card']
@@ -618,6 +627,7 @@ def download_portfolio(token):
     all_cards_list = []
     while True:
         cards_response = send_graphql_request(query=query_get_cards, variables=variables_get_cards, token=token)
+        print("Cards Response:", cards_response)
         portfolio_list = extract_portfolio_data(cards_response)
         if not portfolio_list:
             break
