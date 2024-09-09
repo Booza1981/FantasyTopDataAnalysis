@@ -136,13 +136,24 @@ def calculate_tournament_statistics(df):
     
     return df
 
+
 def merge_dataframes(dataframes):
     """Merges all dataframes including basic hero stats, tournament scores, and other hero-related data."""
     merged_hero_stats = dataframes['basic_hero_stats'].merge(dataframes['hero_stats'], on='hero_handle', how='left')
     merged_hero_stats = merged_hero_stats.merge(dataframes['hero_card_supply'], on='hero_id', how='left')
     merged_hero_stats = merged_hero_stats.merge(dataframes['listings'], on=['hero_id', 'hero_handle'], how='left')
-    merged_hero_stats = merged_hero_stats.merge(dataframes['last_trades'], on=['hero_id'], how='left')
     
+    # Deduplicate hero_trades by taking the latest price per hero_id and rarity (adjust based on your needs)
+    latest_trades_df = dataframes['hero_trades'].sort_values(by=['hero_id', 'rarity', 'timestamp'], ascending=False)
+    latest_trades_df = latest_trades_df.drop_duplicates(subset=['hero_id', 'rarity'], keep='first')
+
+    # Pivot the latest_trades_df so that each rarity has its own column
+    latest_trades_pivot = latest_trades_df.pivot(index='hero_id', columns='rarity', values='price').reset_index()
+    latest_trades_pivot.columns = ['hero_id', 'rarity4lastSalePrice', 'rarity3lastSalePrice', 'rarity2lastSalePrice', 'rarity1lastSalePrice']
+    
+    # Merge the latest trades with merged_hero_stats on 'hero_id'
+    merged_hero_stats = merged_hero_stats.merge(latest_trades_pivot, on='hero_id', how='left')
+
     # Check if 'Name' exists in tournament_scores before dropping it
     if 'Name' in dataframes['tournament_scores'].columns:
         dataframes['tournament_scores'].drop(columns=['Name'], inplace=True)
@@ -153,6 +164,8 @@ def merge_dataframes(dataframes):
     merged_hero_stats['hero_id'] = merged_hero_stats['hero_id'].astype(str)
     
     return merged_hero_stats
+
+
 
 def save_final_dataframes(final_merged_df):
     """Saves the final merged dataframe to a CSV file."""
@@ -170,8 +183,6 @@ def compile_data():
     # Calculate tournament statistics
     dataframes['tournament_scores'] = calculate_tournament_statistics(dataframes['tournament_scores'])
 
-    # Load other hero data (assuming these are stored in separate files)
-    
 
     # Merge all dataframes
     final_merged_df = merge_dataframes(dataframes)
