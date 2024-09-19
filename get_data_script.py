@@ -380,7 +380,10 @@ def retry_request(func, retries=3, delay=30, *args, **kwargs):
     """
     for attempt in range(retries):
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            if result is False:  # Check for JWT verification failure
+                return False
+            return True  # Successful execution
         except Exception as e:
             sys.stdout.write(f"\rError: {e}, attempt {attempt + 1}/{retries}")
             sys.stdout.flush()
@@ -389,7 +392,7 @@ def retry_request(func, retries=3, delay=30, *args, **kwargs):
             else:
                 sys.stdout.write(f"\rFailed after {retries} attempts\n")
                 sys.stdout.flush()
-    return None
+    return True  # Continue with other operations even if this request failed
 
 ############################################################################
 # Data Download Functions
@@ -1043,7 +1046,6 @@ def get_bids(hero_id_list, token, cookies):
 
 def download_hero_trades(hero_ids, token):
     all_trades_data = []
-
     query = """
     query GET_HERO_TRADES_CHART($hero_id: String!, $timestamp: timestamptz!) {
       indexer_trades(
@@ -1059,7 +1061,6 @@ def download_hero_trades(hero_ids, token):
       }
     }
     """
-
     timestamp = (datetime.utcnow() - timedelta(days=30)).isoformat()
 
     with tqdm(hero_ids, desc="Fetching hero trades data") as pbar:
@@ -1070,23 +1071,27 @@ def download_hero_trades(hero_ids, token):
             }
 
             def request_func():
-                try:
-                    response_data = send_graphql_request(query=query, variables=variables, token=token)
-                    trades = response_data.get('data', {}).get('indexer_trades', [])
-                    for trade in trades:
-                        trade_data = {
-                            'hero_id': hero_id,
-                            'timestamp': trade['timestamp'],
-                            'rarity': trade['card']['rarity'],
-                            'price': convert_to_eth(trade['price'])
-                        }
-                        all_trades_data.append(trade_data)
-                except JWTVerificationError:
-                    print("JWT verification failed. Stopping the process.")
-                    return False  # Signal to stop the entire process
-                except Exception as e:
-                    raise ValueError(f"Error fetching hero trades for hero_id {hero_id}: {str(e)}")
+                response_data = send_graphql_request(query=query, variables=variables, token=token)
+                
+                if 'errors' in response_data:
+                    error_message = response_data['errors'][0].get('message', '')
+                    if 'Could not verify JWT' in error_message:
+                        print("JWT verification failed. Stopping the process.")
+                        return False  # Signal to stop the entire process
+                    else:
+                        raise ValueError(f"Error fetching hero trades for hero_id {hero_id}: {response_data['errors']}")
 
+                trades = response_data.get('data', {}).get('indexer_trades', [])
+                for trade in trades:
+                    trade_data = {
+                        'hero_id': hero_id,
+                        'timestamp': trade['timestamp'],
+                        'rarity': trade['card']['rarity'],
+                        'price': convert_to_eth(trade['price'])
+                    }
+                    all_trades_data.append(trade_data)
+                return True  # Signal successful execution
+            
             if not retry_request(func=request_func, retries=3, delay=2):
                 break  # Stop the entire process if JWT verification failed
 
