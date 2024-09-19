@@ -229,7 +229,7 @@ def process_portfolio_scores(portfolio_df, final_merged_df, ALL_SCORES):
     portfolio_scores['lastSalePrice'] = portfolio_scores.apply(lambda row: row[f'rarity{row["rarity"]}lastSalePrice'], axis=1)
     portfolio_scores['lowestPrice'] = portfolio_scores.apply(lambda row: row[f'rarity{row["rarity"]}_lowest_price'], axis=1)
     portfolio_scores['rarityCount'] = portfolio_scores.apply(lambda row: row[f'rarity{row["rarity"]}Count'], axis=1)
-    print(portfolio_scores.columns)
+    
     columns_to_drop = [
         'rarity1_lowest_price', 'rarity2_lowest_price', 'rarity3_lowest_price', 'rarity4_lowest_price',
         'rarity1lastSalePrice', 'rarity2lastSalePrice', 'rarity3lastSalePrice', 'rarity4lastSalePrice',
