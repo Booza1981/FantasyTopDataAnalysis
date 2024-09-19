@@ -174,6 +174,9 @@ def merge_dataframes(dataframes):
     latest_trades_df = dataframes['hero_trades'].sort_values(by=['hero_id', 'rarity', 'timestamp'], ascending=False)
     latest_trades_df = latest_trades_df.drop_duplicates(subset=['hero_id', 'rarity'], keep='first')
 
+    # Convert price to ETH
+    latest_trades_df['price'] = latest_trades_df['price'].apply(convert_to_eth)
+
     # Pivot the latest_trades_df so that each rarity has its own column
     latest_trades_pivot = latest_trades_df.pivot(index='hero_id', columns='rarity', values='price').reset_index()
     latest_trades_pivot.columns = ['hero_id', 'rarity4lastSalePrice', 'rarity3lastSalePrice', 'rarity2lastSalePrice', 'rarity1lastSalePrice']
