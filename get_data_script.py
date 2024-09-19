@@ -318,6 +318,10 @@ def login():
 # Data Download Supporting Functions
 ############################################################################
 
+class JWTVerificationError(Exception):
+    """Custom exception for JWT verification errors."""
+    pass
+
 def send_graphql_request(query=None, variables=None, token=None, request_type='graphql', params=None, cookies=None):
     if request_type == 'graphql':
         payload = json.dumps({
@@ -325,25 +329,21 @@ def send_graphql_request(query=None, variables=None, token=None, request_type='g
             "variables": variables
         })
         headers = {
-                'authorization': f'Bearer {token}',
-                'content-type': 'application/json',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
-                'accept': '*/*',
-                'origin': 'https://fantasy.top',
-                'sec-fetch-site': 'cross-site',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-dest': 'empty',
-                'referer': 'https://fantasy.top/',
-                'accept-encoding': 'gzip, deflate, br, zstd',
-                'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-                'sec-ch-ua': '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"'
-            }
+            'authorization': f'Bearer {token}',
+            'content-type': 'application/json',
+            # ... (rest of the headers)
+        }
 
         response = requests.post(URL_GRAPHQL, headers=headers, data=payload, cookies=cookies)
         response.raise_for_status()
-        return response.json()
+        response_data = response.json()
+
+        if 'errors' in response_data:
+            error_message = response_data['errors'][0].get('message', '')
+            if 'Could not verify JWT' in error_message:
+                raise JWTVerificationError("JWT verification failed. Please check your authentication.")
+        
+        return response_data
     
     elif request_type == 'rest':
         headers = {
@@ -1070,25 +1070,26 @@ def download_hero_trades(hero_ids, token):
             }
 
             def request_func():
-                response_data = send_graphql_request(query=query, variables=variables, token=token)
-                
-                if 'errors' in response_data:
-                    raise ValueError(f"Error fetching hero trades for hero_id {hero_id}: {response_data['errors']}")
+                try:
+                    response_data = send_graphql_request(query=query, variables=variables, token=token)
+                    trades = response_data.get('data', {}).get('indexer_trades', [])
+                    for trade in trades:
+                        trade_data = {
+                            'hero_id': hero_id,
+                            'timestamp': trade['timestamp'],
+                            'rarity': trade['card']['rarity'],
+                            'price': convert_to_eth(trade['price'])
+                        }
+                        all_trades_data.append(trade_data)
+                except JWTVerificationError:
+                    print("JWT verification failed. Stopping the process.")
+                    return False  # Signal to stop the entire process
+                except Exception as e:
+                    raise ValueError(f"Error fetching hero trades for hero_id {hero_id}: {str(e)}")
 
-                trades = response_data.get('data', {}).get('indexer_trades', [])
-                for trade in trades:
-                    trade_data = {
-                        'hero_id': hero_id,
-                        'timestamp': trade['timestamp'],
-                        'rarity': trade['card']['rarity'],
-                        'price': convert_to_eth(trade['price'])
-                    }
-                    all_trades_data.append(trade_data)
-            
-            retry_request(func=request_func, retries=3, delay=2)
-    
+            if not retry_request(func=request_func, retries=3, delay=2):
+                break  # Stop the entire process if JWT verification failed
 
-    
     return pd.DataFrame(all_trades_data)
 
 def get_last_trades(token):
@@ -1692,13 +1693,14 @@ def main():
         update_tournament_status(PLAYER_ID, token)
         update_basic_hero_stats(driver, token)
         update_portfolio(driver, token) 
-        # update_last_trades(driver, token)
         update_listings(driver)
         update_hero_stats(driver, token)
         update_hero_trades(driver, token)
         update_hero_supply(driver, token)
         update_bids(driver, token)
         update_tournament_history(driver, token)
+    except JWTVerificationError:
+        print("JWT verification failed. Please check your authentication and try again.")
     finally:
         driver.quit()
 
