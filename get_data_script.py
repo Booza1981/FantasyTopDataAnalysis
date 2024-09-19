@@ -1081,11 +1081,13 @@ def download_hero_trades(hero_ids, token):
                         'hero_id': hero_id,
                         'timestamp': trade['timestamp'],
                         'rarity': trade['card']['rarity'],
-                        'price': trade['price']
+                        'price': convert_to_eth(trade['price'])
                     }
                     all_trades_data.append(trade_data)
             
             retry_request(func=request_func, retries=3, delay=2)
+    
+
     
     return pd.DataFrame(all_trades_data)
 
