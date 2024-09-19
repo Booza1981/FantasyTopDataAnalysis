@@ -68,6 +68,7 @@ def import_all_tournament_csvs(folder_path):
     """Imports and merges all tournament CSVs into a single DataFrame."""
     tournament_files = get_sorted_tournament_files(folder_path)
     all_hero_data = pd.DataFrame()
+    tournament_columns = []  # New list to keep track of tournament columns, used for calculating rarity scores laster
 
     for file_path in tournament_files:
         print(f"Reading tournament file: {file_path}")
@@ -86,6 +87,8 @@ def import_all_tournament_csvs(folder_path):
                 column_name = f"{tournament_name.replace('_', ' ')} Score"
                 df = df[['hero_handle', 'fantasy_score']].rename(columns={'fantasy_score': column_name})
                 
+                tournament_columns.append(column_name)
+
                 if all_hero_data.empty:
                     all_hero_data = df
                 else:
@@ -99,7 +102,31 @@ def import_all_tournament_csvs(folder_path):
         except Exception as e:
             print(f"Error reading file {file_path}: {e}")
 
-    return all_hero_data
+    return all_hero_data, tournament_columns
+
+def generate_all_scores_list(tournament_columns):
+    """Generates the ALL_SCORES list based on the actual tournament columns and calculated statistics. This list can be used as the basis for adjustment for other rarities or custom calculations."""
+    ALL_SCORES = tournament_columns.copy()
+    
+    # Add calculated statistics columns
+    ALL_SCORES.extend([
+        "Average",
+        "Main_Tournaments_Ave",
+        "Main_Last_4_Ave",
+        "Variance",
+        "Main_Tournaments_Variance",
+        "Main_Last_4_Variance",
+        "Standard_Deviation",
+        "Main_Tournaments_Standard_Deviation",
+        "Main_Last_4_Standard_Deviation",
+        "Moving_Avg_3"
+    ])
+    
+    # Add Z-score columns
+    Z_SCORE_COLUMNS = [f"Z_Score_{col}" for col in tournament_columns]
+    ALL_SCORES.extend(Z_SCORE_COLUMNS)
+    
+    return ALL_SCORES
 
 def calculate_tournament_statistics(df):
     """Calculates tournament statistics like averages, variances, and Z-scores."""
@@ -166,10 +193,65 @@ def merge_dataframes(dataframes):
     return merged_hero_stats
 
 
+import os
 
-def save_final_dataframes(final_merged_df):
+def save_final_dataframes(final_merged_df, portfolio_scores):
     """Saves the final merged dataframe to a CSV file."""
-    final_merged_df.to_csv(f'{DATA_FOLDER}/allHeroData.csv', index=False)
+    try:
+        # Check if DATA_FOLDER is just a drive letter
+        if DATA_FOLDER.endswith(':\\'):
+            all_hero_path = f'{DATA_FOLDER}allHeroData.csv'
+            portfolio_path = f'{DATA_FOLDER}portfolio.csv'
+        else:
+            all_hero_path = os.path.join(DATA_FOLDER, 'allHeroData.csv')
+            portfolio_path = os.path.join(DATA_FOLDER, 'portfolio.csv')
+
+        final_merged_df.to_csv(all_hero_path, index=False)
+        portfolio_scores.to_csv(portfolio_path, index=False)
+        print(f"Files successfully saved to {DATA_FOLDER}")
+    except PermissionError as e:
+        print(f"Permission error: {e}")
+        print("Please ensure you have write permissions for the specified directory.")
+        print(f"Attempted to write to: {DATA_FOLDER}")
+    except Exception as e:
+        print(f"An error occurred while saving the files: {e}")
+        print(f"Attempted to write to: {DATA_FOLDER}")
+
+
+def process_portfolio_scores(portfolio_df, final_merged_df, ALL_SCORES):
+    merged_df = portfolio_df.merge(final_merged_df, on='hero_handle', how='left')
+    portfolio_scores = merged_df.drop(['hero_name_y', 'hero_stars_y', 'hero_followers_count_y', 'hero_profile_image_url_y', 'token_id'], axis=1)
+    portfolio_scores.columns = [col.replace('_x', '') for col in portfolio_scores.columns]
+    
+    columns_order = ['hero_name', 'hero_handle'] + [col for col in portfolio_scores.columns if col not in ['hero_name', 'hero_handle']]
+    portfolio_scores = portfolio_scores[columns_order]
+    
+    portfolio_scores['lastSalePrice'] = portfolio_scores.apply(lambda row: row[f'rarity{row["rarity"]}lastSalePrice'], axis=1)
+    portfolio_scores['lowestPrice'] = portfolio_scores.apply(lambda row: row[f'rarity{row["rarity"]}_lowest_price'], axis=1)
+    portfolio_scores['rarityCount'] = portfolio_scores.apply(lambda row: row[f'rarity{row["rarity"]}Count'], axis=1)
+    
+    columns_to_drop = [
+        'rarity1_lowest_price', 'rarity2_lowest_price', 'rarity3_lowest_price', 'rarity4_lowest_price',
+        'rarity1lastSalePrice', 'rarity2lastSalePrice', 'rarity3lastSalePrice', 'rarity4lastSalePrice',
+        'rarity1Count', 'rarity2Count', 'rarity3Count', 'rarity4Count',
+        'rarity1_order_count', 'rarity2_order_count', 'rarity3_order_count', 'rarity4_order_count'
+    ]
+    portfolio_scores = portfolio_scores.drop(columns=columns_to_drop)
+    
+    for col in ALL_SCORES:
+        if col in portfolio_scores.columns:
+            portfolio_scores[col] = pd.to_numeric(portfolio_scores[col], errors='coerce')
+            if 'Variance' in col:
+                portfolio_scores[col] = portfolio_scores.apply(lambda row: row[col] * 2.25 if row['hero_rarity_index'].endswith('3') else row[col], axis=1)
+            elif 'Z_Score' in col:
+                # Do not modify Z-scores
+                pass
+            else:
+                # For raw scores, averages, and standard deviations
+                portfolio_scores[col] = portfolio_scores.apply(lambda row: row[col] * 1.5 if row['hero_rarity_index'].endswith('3') else row[col], axis=1)
+
+    return portfolio_scores
+
 
 # Main Execution
 
@@ -178,17 +260,20 @@ def compile_data():
     dataframes = import_latest_csv_files(DATA_FOLDER)
     # Load tournament data from all CSVs
     
-    dataframes['tournament_scores'] = import_all_tournament_csvs(os.path.join(DATA_FOLDER, "tournament_results"))
+    all_hero_data, tournament_columns = import_all_tournament_csvs(os.path.join(DATA_FOLDER, "tournament_results"))
+    dataframes['tournament_scores'] = all_hero_data
 
     # Calculate tournament statistics
     dataframes['tournament_scores'] = calculate_tournament_statistics(dataframes['tournament_scores'])
 
-
+    # Generate ALL_SCORES list
+    ALL_SCORES = generate_all_scores_list(tournament_columns)
+        
     # Merge all dataframes
     final_merged_df = merge_dataframes(dataframes)
-
+    portfolio_scores = process_portfolio_scores(dataframes['portfolio'], final_merged_df, ALL_SCORES)
     # Save the final merged data
-    save_final_dataframes(final_merged_df)
+    save_final_dataframes(final_merged_df, portfolio_scores)
 
 if __name__ == "__main__":
     compile_data()
