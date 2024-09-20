@@ -995,7 +995,7 @@ def get_hero_supply(hero_id_list, token):
     return all_hero_supplies_df
 
 def get_bids(hero_id_list, token, cookies):
-    def get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay=2, retries=3):
+    def get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay=2, max_retries=3):
         hero_bids = {'hero_id': hero_id}
         params = {
             'hero_id': hero_id,
@@ -1013,24 +1013,22 @@ def get_bids(hero_id_list, token, cookies):
             hero_bids[f'rarity{rarity}HighestBid'] = highest_bid
             return hero_bids
         
-        result = retry_request(func=request_func, retries=retries, delay=delay)
+        result = retry_request(func=request_func, max_retries=max_retries, base_delay=delay)
         if result is None:
-            tqdm.write(f"Failed to fetch data for hero {hero_id} rarity {rarity} after {retries} attempts")
+            tqdm.write(f"Failed to fetch data for hero {hero_id} rarity {rarity} after {max_retries} attempts")
             hero_bids[f'rarity{rarity}HighestBid'] = None
         
         return hero_bids
     
-    def collect_highest_bids(hero_id_list, token, cookies, delay=7, retries=3):
+    def collect_highest_bids(hero_id_list, token, cookies, delay=7, max_retries=3):
         data = []
         total_heroes = len(hero_id_list)
 
-        # Iterate through rarities first
         for rarity in range(4, 0, -1):  # Start from rarity 4 to 1
             tqdm.write(f"Processing rarity {rarity} for all heroes...")
             for index, hero_id in tqdm(enumerate(hero_id_list), total=total_heroes, desc=f"Rarity {rarity} Progress"):
-                hero_bids = get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay, retries)
+                hero_bids = get_highest_bids_for_hero(hero_id, token, cookies, rarity, delay, max_retries)
                 if hero_id in [d.get('hero_id') for d in data]:
-                    # Update the existing entry for this hero_id
                     existing_data = next(item for item in data if item['hero_id'] == hero_id)
                     existing_data.update(hero_bids)
                 else:
