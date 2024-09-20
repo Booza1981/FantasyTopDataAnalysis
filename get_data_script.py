@@ -364,32 +364,34 @@ def send_graphql_request(query=None, variables=None, token=None, request_type='g
         response.raise_for_status()
         return response.json()
 
-def retry_request(func, retries=3, delay=30, *args, **kwargs):
+def retry_request(func, max_retries=5, base_delay=1, max_delay=60, *args, **kwargs):
     """
-    Retry a function call with exponential backoff.
+    Retry a function call with exponential backoff and jitter.
 
-    Parameters:
-    - func: The function to retry.
-    - retries: Maximum number of retries.
-    - delay: Initial delay between retries.
-    - *args, **kwargs: Arguments to pass to the function.
-
-    Returns:
-    - The result of the function call if successful.
-    - None if all retries are exhausted.
+    :param func: The function to retry.
+    :param max_retries: Maximum number of retries.
+    :param base_delay: Initial delay between retries in seconds.
+    :param max_delay: Maximum delay between retries in seconds.
+    :param *args, **kwargs: Arguments to pass to the function.
+    :return: The result of the function call if successful.
     """
-    for attempt in range(retries):
+    for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            sys.stdout.write(f"\rError: {e}, attempt {attempt + 1}/{retries}")
-            sys.stdout.flush()
-            if attempt < retries - 1:
-                time.sleep(delay * (2 ** attempt))  # Exponential backoff
+            if 'rate limit' in str(e).lower():
+                if attempt == max_retries - 1:
+                    raise  # Re-raise the exception if this was the last attempt
+                
+                # Calculate delay with exponential backoff and jitter
+                delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                
+                print(f"Rate limit exceeded. Retrying in {delay:.2f} seconds. (Attempt {attempt + 1}/{max_retries})")
+                time.sleep(delay)
             else:
-                sys.stdout.write(f"\rFailed after {retries} attempts\n")
-                sys.stdout.flush()
-    return None
+                raise  # Re-raise the exception if it's not a rate limit error
+
+    raise Exception(f"Function failed after {max_retries} attempts")
 
 ############################################################################
 # Data Download Functions
