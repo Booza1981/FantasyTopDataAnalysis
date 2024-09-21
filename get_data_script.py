@@ -1637,7 +1637,7 @@ def get_latest_file(directory, prefix):
     latest_file = max(files, key=os.path.getmtime)
     return latest_file
 
-def create_hero_list(directory)
+def create_hero_list(directory):
     files = glob.glob(os.path.join(directory, f'star*.csv'))
 
     unique_hero_data = pd.DataFrame()
