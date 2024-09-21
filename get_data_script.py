@@ -1637,20 +1637,40 @@ def get_latest_file(directory, prefix):
     latest_file = max(files, key=os.path.getmtime)
     return latest_file
 
+def create_hero_list(directory)
+    files = glob.glob(os.path.join(directory, f'star*.csv'))
+
+    unique_hero_data = pd.DataFrame()
+
+    for file in files:
+        try:
+            df = pd.read_csv(file, usecols=['id', 'handle'])
+            unique_hero_data = pd.concat([unique_hero_data, df])
+        except Exception as e:
+            print(f"Error reading file {file}: {e}")
+
+    unique_hero_data = unique_hero_data.drop_duplicates().reset_index(drop=True)
+    print(unique_hero_data)
+
+    return unique_hero_data
+
+
 def get_hero_data_list(target_data):
     assert target_data in ['id', 'handle'], f"Invalid target_data: {target_data}. Expected 'id' or 'handle'."
-    
+    hero_list_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'hero_list'))
     if target_data == 'id':
-        hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'star_history'))
-        return hero_stats_df['id'].to_list()
+        return hero_list_df['id'].to_list()
     elif target_data == "handle":
-        basic_hero_stats_df = pd.read_csv(get_latest_file(DATA_FOLDER, 'star_history'))
-        return basic_hero_stats_df['handle'].to_list()
+        return hero_list_df['handle'].to_list()
     
 
 ############################################################################
 # Functions for saving data to CSV
 ############################################################################
+
+def update_unique_hero_list():
+    hero_list = create_hero_list(DATA_FOLDER)
+    save_df_as_csv(hero_list, 'hero_list')
 
 def update_basic_hero_stats(driver, token):
     basic_hero_stats_df = print_runtime(download_basic_hero_stats, token)
@@ -1702,6 +1722,8 @@ def update_tournament_status(driver, token):
 
 
 # Main Execution Function with Reusable Driver and Token
+
+update_unique_hero_list()
 
 def main():
     driver, token = login()
