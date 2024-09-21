@@ -199,7 +199,7 @@ def setup_driver():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
-    print(ChromeDriverManager().install())
+    
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     return driver
@@ -399,7 +399,6 @@ def retry_request(func, max_retries=5, base_delay=1, max_delay=60, *args, **kwar
 
 def download_listings(driver):
     actions = ActionChains(driver)
-    # Open DevTools
     actions.send_keys(Keys.F12).perform() 
     driver.get('https://fantasy.top/marketplace')
     time.sleep(5)
@@ -428,11 +427,6 @@ def download_listings(driver):
     websocket_messages = []
     for log in all_logs:
         message = json.loads(log['message'])['message']
-        
-        # Print the log level to identify which ones are useful
-        if 'level' in message:
-            print(f"Log Level: {message['level']}")
-
         if message['method'] == 'Network.webSocketFrameReceived':
             try:
                 payload = json.loads(message['params']['response']['payloadData'])
@@ -441,66 +435,66 @@ def download_listings(driver):
             except (json.JSONDecodeError, KeyError):
                 continue
     
-    # Overwrite the JSON file with fresh data
-    json_file_path = 'websocket_messages.json'
-    with open(json_file_path, 'w') as f:
-        json.dump(websocket_messages, f, indent=4)
-    
     processed_data = []
     for message in websocket_messages:
         if 'payload' in message and 'data' in message['payload']:
-            orders = message['payload']['data']['unique_sell_orders_stream']
+            orders = message['payload']['data'].get('unique_sell_orders_stream', [])
             for order in orders:
-                hero_data = order.get('hero', None)
-                if hero_data is not None:  # Ensure hero_data is not None
-                    hero_info = {
-                        'hero_id': order['hero_id'],
-                        'lowest_price': order['lowest_price'],
-                        'order_count': order['order_count'],
-                        'sell_order_id': order['sell_order_id'],
-                        'hero_rarity_index': order['hero_rarity_index'],
-                        'gliding_score': order['gliding_score'],
-                        'updated_at': order['updated_at'],
-                        'hero_followers_count': hero_data.get('followers_count', None),
-                        'hero_handle': hero_data.get('handle', None),
-                        'hero_name': hero_data.get('name', None),
-                        'hero_stars': hero_data.get('stars', None),
-                        'current_rank': hero_data.get('current_score', {}).get('current_rank', None) if hero_data.get('current_score') else None,
-                        'previous_rank': hero_data.get('current_score', {}).get('previous_rank', None) if hero_data.get('current_score') else None,
-                        'views': hero_data.get('current_score', {}).get('views', None) if hero_data.get('current_score') else None,
-                        'fantasy_score': hero_data.get('current_score', {}).get('fantasy_score', None) if hero_data.get('current_score') else None
-                    }
-                    processed_data.append(hero_info)
+                hero_data = order.get('hero', {})
+                current_score = hero_data.get('current_score') or {}
+                hero_info = {
+                    'hero_id': order.get('hero_id'),
+                    'lowest_price': order.get('lowest_price'),
+                    'order_count': order.get('order_count'),
+                    'sell_order_id': order.get('sell_order_id'),
+                    'hero_rarity_index': order.get('hero_rarity_index'),
+                    'gliding_score': order.get('gliding_score'),
+                    'updated_at': order.get('updated_at'),
+                    'hero_followers_count': hero_data.get('followers_count'),
+                    'hero_handle': hero_data.get('handle'),
+                    'hero_name': hero_data.get('name'),
+                    'hero_stars': hero_data.get('stars'),
+                    'current_rank': current_score.get('current_rank'),
+                    'previous_rank': current_score.get('previous_rank'),
+                    'views': current_score.get('views'),
+                    'fantasy_score': current_score.get('fantasy_score')
+                }
+                processed_data.append(hero_info)
     
-    # Close DevTools
     actions.send_keys(Keys.F12).perform()
 
-    # Delete the JSON file after processing
-    if os.path.exists(json_file_path):
-        os.remove(json_file_path)
-        print(f"Deleted the file: {json_file_path}")
-    else:
-        print(f"The file {json_file_path} does not exist")
-
     raw_listings_df = pd.DataFrame(processed_data)
-    listings_df = raw_listings_df.drop_duplicates(subset=['hero_id', 'hero_rarity_index'])
-    listings_df.loc[:, 'rarity'] = listings_df['hero_rarity_index'].str.split('_').str[1]
-    listings_df.loc[:, 'rarity'] = 'rarity' + listings_df['rarity']
+    
+    # Remove rows where hero_id or hero_rarity_index is null
+    listings_df = raw_listings_df.dropna(subset=['hero_id', 'hero_rarity_index'])
+    
+    # Convert hero_rarity_index to string before splitting
+    listings_df['rarity'] = listings_df['hero_rarity_index'].astype(str).str.split('_').str[1]
+    listings_df['rarity'] = 'rarity' + listings_df['rarity']
+    
+    # Perform pivot table operation
     pivot_df = listings_df.pivot_table(
         index='hero_id',
         columns='rarity',
         values=['lowest_price', 'order_count'],
-        aggfunc='first'
+        aggfunc='first',
+        fill_value=0  # Fill NaN values with 0
     )
+    
+    # Flatten column names
     pivot_df.columns = [f'{col[1]}_{col[0]}' for col in pivot_df.columns]
     pivot_df.reset_index(inplace=True)
-    hero_info_columns = ['hero_id', 'hero_handle', 'hero_name', 'hero_stars', 'hero_followers_count', 
-                         'current_rank', 'previous_rank', 'views', 'fantasy_score']
+    
+    hero_info_columns = ['hero_id', 'hero_handle', 'hero_stars']
     unique_hero_info = listings_df[hero_info_columns].drop_duplicates(subset=['hero_id'])
-    final_df = pd.merge(unique_hero_info, pivot_df, on='hero_id')
-    final_df.drop(columns=['hero_name', 'hero_followers_count', 
-                           'current_rank', 'previous_rank', 'views', 'fantasy_score'], inplace=True)
-    final_df = final_df.rename(columns={'heroId': 'hero_id'})
+    
+    # Merge the pivot table with hero info
+    final_df = pd.merge(unique_hero_info, pivot_df, on='hero_id', how='outer')
+    
+    # Fill NaN values in numeric columns with 0
+    numeric_columns = final_df.select_dtypes(include=[np.number]).columns
+    final_df[numeric_columns] = final_df[numeric_columns].fillna(0)
+    
     return final_df
 
 def download_portfolio(token):
