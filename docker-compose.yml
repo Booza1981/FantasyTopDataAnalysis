@@ -1,7 +1,8 @@
-version: '3'
 services:
   streamlit-app:
     build:
+      context: .
+      dockerfile: DockerFile
     ports:
       - 8501:8501
     volumes:
